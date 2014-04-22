@@ -7,9 +7,11 @@
 
 #include "InternalsPlugin.hpp"
 
+const int GREEN_FLAG = 5;
+const double SCORING_UPDATE_TICK = 0.200; /* Seconds */
 
 // This is used for the app to use the plugin for its intended purpose
-class DeltaBestPlugin : public InternalsPluginV05
+class DeltaBestPlugin : public InternalsPluginV06
 {
 
 public:
@@ -33,7 +35,7 @@ public:
 	long WantsTelemetryUpdates() { return 0; }
 	void UpdateTelemetry(const TelemInfoV01 &info) { }
 
-	bool WantsGraphicsUpdates() { return true; }
+	bool WantsGraphicsUpdates() { return false; }
 	void UpdateGraphics(const GraphicsInfoV02 &info) { }
 
 	// GAME INPUT
@@ -84,8 +86,9 @@ public:
 
 private:
 
+	double CalculateDeltaBest();
+	bool NeedToDisplay();
 	void WriteLog(const char * const msg);
-	float CalculateDeltaBest();
 
 	float mET;     // needed for the hardware example
 	bool mEnabled; // needed for the hardware example
