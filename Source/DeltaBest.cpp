@@ -7,11 +7,6 @@
 
 #include "DeltaBest.hpp"
 
-#include <assert.h>
-#include <math.h>               // for rand()
-#include <stdio.h>              // for sample output
-#include <d3dx9.h>              // DirectX9 main header
-
 // plugin information
 
 extern "C" __declspec(dllexport)
@@ -33,35 +28,6 @@ extern "C" __declspec(dllexport)
 void __cdecl DestroyPluginObject(PluginObject *obj)  { delete((DeltaBestPlugin *)obj); }
 
 
-//
-// Current status
-//
-
-bool in_realtime = false;              /* Are we in cockpit? As opposed to monitor */
-bool green_flag = false;               /* Is the race in green flag condition? */
-unsigned int last_pos = 0;             /* Meters around the track of the current lap */
-unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
-double current_delta_best = NULL;      /* Current calculated delta best time */
-double prev_lap_dist = 0;              /* Used to accurately calculate dt and */
-double prev_current_et = 0;            /*   speed of last interval */
-
-/* Keeps information about last and best laps */
-struct LapTime {
-	//double distance[10000];
-	double elapsed[50000];             /* Longest possible track is 50km */
-	double final = NULL;
-	double started = NULL;
-	double ended = NULL;
-	double interval_offset = 0.0;
-} best_lap, last_lap;
-
-FILE* out_file;
-
-// DirectX 9 objects, to render some text on screen
-LPD3DXFONT g_Font = NULL;
-D3DXFONT_DESC FontDesc = { 40, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, "Consolas Bold" };
-RECT FontPosition;
-
 
 //
 // DeltaBestPlugin class
@@ -69,11 +35,13 @@ RECT FontPosition;
 
 void DeltaBestPlugin::WriteLog(const char * const msg)
 {
+#ifdef ENABLE_LOG
 	if (out_file == NULL)
 		out_file = fopen("Plugins\\DeltaBest.log", "w");
 
 	if (out_file != NULL)
 		fprintf(out_file, "%s\n", msg);
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::Startup(long version)
@@ -88,15 +56,19 @@ void DeltaBestPlugin::Shutdown()
 
 void DeltaBestPlugin::StartSession()
 {
-	out_file = fopen("Plugins\\DeltaBest.log", "w");
-	WriteLog("--STARTSESSION--");
+#ifdef ENABLE_LOG
+    out_file = fopen("Plugins\\DeltaBest.log", "w");
+    WriteLog("--STARTSESSION--");
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::EndSession()
 {
-	WriteLog("--ENDSESSION--");
-	if (out_file)
-		fclose(out_file);
+#ifdef ENABLE_LOG
+    WriteLog("--ENDSESSION--");
+    if (out_file)
+        fclose(out_file);
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::EnterRealtime()
@@ -104,13 +76,17 @@ void DeltaBestPlugin::EnterRealtime()
 	// start up timer every time we enter realtime
 	mET = 0.0f;
 	in_realtime = true;
-	WriteLog("---ENTERREALTIME---");
+#ifdef ENABLE_LOG
+    WriteLog("---ENTERREALTIME---");
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::ExitRealtime()
 {
 	in_realtime = false;
-	WriteLog("---EXITREALTIME---");
+#ifdef ENABLE_LOG
+    WriteLog("---EXITREALTIME---");
+#endif /* ENABLE_LOG */
 }
 
 bool DeltaBestPlugin::NeedToDisplay()
@@ -150,16 +126,17 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 		if (! vinfo.mIsPlayer)
 			continue;
 
-		fprintf(out_file, "mLapStartET=%.3f mCurrentET=%.3f Elapsed=%.3f mLapDist=%.3f/%.3f prevLapDist=%.3f prevCurrentET=%.3f deltaBest=%+2.2f\n",
-			vinfo.mLapStartET,
-			info.mCurrentET,
-			(info.mCurrentET - vinfo.mLapStartET),
-			vinfo.mLapDist,
-			info.mLapDist,
-			prev_lap_dist,
-			prev_current_et,
-			current_delta_best
-		);
+#ifdef ENABLE_LOG
+        fprintf(out_file, "mLapStartET=%.3f mCurrentET=%.3f Elapsed=%.3f mLapDist=%.3f/%.3f prevLapDist=%.3f prevCurrentET=%.3f deltaBest=%+2.2f\n",
+            vinfo.mLapStartET,
+            info.mCurrentET,
+            (info.mCurrentET - vinfo.mLapStartET),
+            vinfo.mLapDist,
+            info.mLapDist,
+            prev_lap_dist,
+            prev_current_et,
+            current_delta_best);
+#endif /* ENABLE_LOG */
 
 		/* Check if we started a new lap just now */
 		bool new_lap = (vinfo.mLapStartET != last_lap.started);
@@ -174,19 +151,26 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 				last_lap.final = vinfo.mLastLapTime;
 				last_lap.ended = info.mCurrentET;
 
-				fprintf(out_file, "New LAP: Last = %.3f, started = %.3f, ended = %.3f, interval_offset = %.3f\n",
-					last_lap.final, last_lap.started, last_lap.ended, last_lap.interval_offset);
+#ifdef ENABLE_LOG
+                fprintf(out_file, "New LAP: Last = %.3f, started = %.3f, ended = %.3f, interval_offset = %.3f\n",
+                    last_lap.final, last_lap.started, last_lap.ended, last_lap.interval_offset);
+#endif /* ENABLE_LOG */
 
 				/* Was it the best lap so far? */
 				bool best_so_far = (best_lap.final == NULL || (last_lap.final < best_lap.final));
 				if (best_so_far) {
-					fprintf(out_file, "Last lap was the best so far (final time = %.3f, previous best = %.3f)\n",
-						last_lap.final, best_lap.final);
+#ifdef ENABLE_LOG
+                    fprintf(out_file, "Last lap was the best so far (final time = %.3f, previous best = %.3f)\n",
+                        last_lap.final, best_lap.final);
+#endif /* ENABLE_LOG */
 					best_lap = last_lap;
 				}
 
-				fprintf(out_file, "Best LAP yet  = %.3f, started = %.3f, ended = %.3f, interval_offset = %3.f\n",
-					best_lap.final, best_lap.started, best_lap.ended, best_lap.interval_offset);
+#ifdef ENABLE_LOG
+                fprintf(out_file, "Best LAP yet  = %.3f, started = %.3f, ended = %.3f, interval_offset = %3.f\n",
+                    best_lap.final, best_lap.started, best_lap.ended, best_lap.interval_offset);
+#endif /* ENABLE_LOG */
+
 			}
 
 			/* Prepare to archive the new lap */
@@ -195,7 +179,6 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 			last_lap.ended = NULL;
 			last_lap.interval_offset = info.mCurrentET - vinfo.mLapStartET;
 			last_lap.elapsed[0] = 0;
-			scoring_ticks = 0;
 			last_pos = 0;
 			prev_lap_dist = 0;
 			/* Leave prev_current_et alone, or you have hyper-jumps */
@@ -217,7 +200,9 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
                 if (meters == last_pos) {
                     last_lap.elapsed[meters] = info.mCurrentET - vinfo.mLapStartET;
+#ifdef ENABLE_LOG
                     fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f [same position]\n", last_lap.elapsed[meters]);
+#endif /* ENABLE_LOG */
                 }
                 else {
                     for (unsigned int i = last_pos; i <= meters; i++) {
@@ -225,12 +210,16 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
                         double interval_fraction = meters == last_pos ? 1.0 : (1.0 * i - last_pos) / (1.0 * meters - last_pos);
                         last_lap.elapsed[i] = prev_current_et + (interval_fraction * time_interval);
                         last_lap.elapsed[i] -= vinfo.mLapStartET;
+#ifdef ENABLE_LOG
                         fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f (interval_fraction=%.3f)\n", i, last_lap.elapsed[i], interval_fraction);
+#endif /* ENABLE_LOG */
                     }
                 }
 
+#ifdef ENABLE_LOG
 				fprintf(out_file, "[DELTA] distance_traveled=%.3f time_interval=%.3f avg_speed=%.3f [%d .. %d]\n",
 					distance_traveled, time_interval, avg_speed, last_pos, meters);
+#endif /* ENABLE_LOG */
 			}
 
 			last_pos = meters;
@@ -240,7 +229,6 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
             prev_lap_dist = curr_lap_dist;
 
         prev_current_et = info.mCurrentET;
-
 		current_delta_best = CalculateDeltaBest();
 
 	}
@@ -249,7 +237,9 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
 {
-	// Now we know screen X/Y, we can place the text somewhere specific:
+    FontDesc = { 48, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, "Arial Black" };
+
+    // Now we know screen X/Y, we can place the text somewhere specific:
 	// 4/5th of the screen height
 	FontPosition.top = info.mHeight / 6.0;
 	FontPosition.left = 0;
@@ -259,7 +249,10 @@ void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
 	D3DXCreateFontIndirect((LPDIRECT3DDEVICE9) info.mDevice, &FontDesc, &g_Font);
 	assert(g_Font != NULL);
 
-	WriteLog("---INIT SCREEN---");
+#ifdef ENABLE_LOG
+   	WriteLog("---INIT SCREEN---");
+#endif /* ENABLE_LOG */
+
 }
 
 void DeltaBestPlugin::UninitScreen(const ScreenInfoV01& info)
@@ -268,17 +261,23 @@ void DeltaBestPlugin::UninitScreen(const ScreenInfoV01& info)
 		g_Font->Release();
 		g_Font = NULL;
 	}
-	WriteLog("---UNINIT SCREEN---");
+#ifdef ENABLE_LOG
+    WriteLog("---UNINIT SCREEN---");
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::DeactivateScreen(const ScreenInfoV01& info)
 {
+#ifdef ENABLE_LOG
 	WriteLog("---DEACTIVATE SCREEN---");
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::ReactivateScreen(const ScreenInfoV01& info)
 {
+#ifdef ENABLE_LOG
 	WriteLog("---REACTIVATE SCREEN---");
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::RenderScreenBeforeOverlays(const ScreenInfoV01 &info)
@@ -305,63 +304,12 @@ double DeltaBestPlugin::CalculateDeltaBest()
 		delta_best = -99.0;
 
 	return delta_best;
-
-	///*
-	//Extrapolate the best lap recording at the exact time
-	//we need to compare it with out current lap
-	//*/
-	//
-	///* First let's calculate the best lap slope
-	//(none other than average speed in the tick) */
-	//double bestSpeed, lastSpeed;
-	//unsigned int t = scoring_ticks;
-	//if (t > 0) {
-	//	bestSpeed = (best_lap.distance[t] - best_lap.distance[t - 1]) /
-	//		(best_lap.elapsed[t] - best_lap.elapsed[t - 1]);
-	//	lastSpeed = (last_lap.distance[t] - last_lap.distance[t - 1]) /
-	//		(last_lap.elapsed[t] - last_lap.elapsed[t - 1]);
-	//}
-	//else {
-	//	bestSpeed = best_lap.distance[t] / best_lap.elapsed[t];
-	//	lastSpeed = last_lap.distance[t] / last_lap.elapsed[t];
-	//}
-
-	///* We can now use the speed to extract the distance at the exact
-	//   same moment (elapsed) for the current lap */
-	//double bestLapDistanceAtTime, deltaBest;
-
-	//if (t > 0) {
-	//	bestLapDistanceAtTime = best_lap.distance[t - 1]
-	//		+ (bestSpeed * (last_lap.elapsed[t] - best_lap.elapsed[t - 1]));
-	//}
-	//else {
-	//	bestLapDistanceAtTime = bestSpeed * last_lap.elapsed[t];
-	//}
-
-	///* AAh, this is a steaming pile of poo */
-	////if (lastSpeed < 0.001)
-	////	lastSpeed = 0.01;
-
-	//deltaBest = (bestLapDistanceAtTime - last_lap.distance[t]) / bestSpeed;
-
-	///* Avoid ridiculous values */
-	//if (deltaBest > 99)
-	//	deltaBest = 99.0;
-	//else if (deltaBest < -99)
-	//	deltaBest = -99.0;
-
-	//fprintf(out_file, "[DELTA] t=%d best.distance[t] = %.3f @ %.3f last.distance[t] = %.3f @ %.3f best.speed = %.3f best.atTimeX = %.3f delta = %.3f\n",
-	//	t, best_lap.distance[t], best_lap.elapsed[t], last_lap.distance[t], last_lap.elapsed[t],
-	//	bestSpeed, bestLapDistanceAtTime, deltaBest);
-
-	//return deltaBest;
 }
 
 void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 {
 	char lp_deltaBest[15] = "";
 	double deltaBest = current_delta_best;
-	D3DCOLOR textColor;
 
 	// If we're not in realtime, not in green flag, etc...
 	// there's no need to display the Delta Best time.
@@ -372,10 +320,25 @@ void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 	if (g_Font == NULL)
 		return;
 
-	textColor = (deltaBest > 0) ? 0xffff0000 : 0xff00ff00;
+    D3DCOLOR textColor = TextColor(deltaBest);
 	sprintf(lp_deltaBest, "%+2.2f", deltaBest);
 	g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition, DT_CENTER, textColor);
 
+}
+
+D3DCOLOR DeltaBestPlugin::TextColor(double deltaBest)
+{
+    static const D3DCOLOR ALPHA = 0xC0000000;
+    static const D3DCOLOR GREEN = 0x00EE00 | ALPHA;
+    static const D3DCOLOR RED   = 0xEE0000 | ALPHA;
+    static const D3DCOLOR COLOR_GRADIENT[10] = { 0x22ee22, 0x44ee44, 0x66ee66, 0x88ee88, 0xcceecc, 0xeecccc, 0xee8888, 0xee6666, 0xee4444, 0xee2222 };
+
+    if (deltaBest < -0.05)
+        return GREEN;
+    if (deltaBest > 0.05)
+        return RED;
+
+    return COLOR_GRADIENT[(int)(deltaBest * 100 + 5 % 10)] | ALPHA;
 }
 
 void DeltaBestPlugin::PreReset(const ScreenInfoV01 &info)

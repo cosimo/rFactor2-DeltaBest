@@ -6,9 +6,15 @@
 #define _INTERNALS_EXAMPLE_H
 
 #include "InternalsPlugin.hpp"
+#include <assert.h>
+#include <math.h>               // for rand()
+#include <stdio.h>              // for sample output
+#include <d3dx9.h>              // DirectX9 main header
 
-const int GREEN_FLAG = 5;
-const double SCORING_UPDATE_TICK = 0.200; /* Seconds */
+
+#undef ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
+#define GREEN_FLAG 5
+
 
 // This is used for the app to use the plugin for its intended purpose
 class DeltaBestPlugin : public InternalsPluginV06
@@ -88,10 +94,40 @@ private:
 
 	double CalculateDeltaBest();
 	bool NeedToDisplay();
-	void WriteLog(const char * const msg);
+    void WriteLog(const char * const msg);
+    D3DCOLOR TextColor(double deltaBest);
 
-	float mET;     // needed for the hardware example
-	bool mEnabled; // needed for the hardware example
+    //
+    // Current status
+    //
+
+    float mET;                             /* needed for the hardware example */
+	bool mEnabled;                         /* needed for the hardware example */
+
+    bool in_realtime = false;              /* Are we in cockpit? As opposed to monitor */
+    bool green_flag = false;               /* Is the race in green flag condition? */
+    unsigned int last_pos = 0;             /* Meters around the track of the current lap */
+    unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
+    double current_delta_best = NULL;      /* Current calculated delta best time */
+    double prev_lap_dist = 0;              /* Used to accurately calculate dt and */
+    double prev_current_et = 0;            /*   speed of last interval */
+
+    /* Keeps information about last and best laps */
+    struct LapTime {
+        double elapsed[50000];             /* Longest possible track is 50km */
+        double final = NULL;
+        double started = NULL;
+        double ended = NULL;
+        double interval_offset = 0.0;
+    } best_lap, last_lap;
+
+    FILE* out_file;
+
+    // DirectX 9 objects, to render some text on screen
+    LPD3DXFONT g_Font = NULL;
+    D3DXFONT_DESC FontDesc;
+    RECT FontPosition;
+
 };
 
 #endif // _INTERNALS_EXAMPLE_H
