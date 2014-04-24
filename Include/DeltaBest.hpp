@@ -60,7 +60,7 @@ public:
 	bool WantsScoringUpdates() { return true; }
 	void UpdateScoring(const ScoringInfoV01 &info);
 
-	// COMMENTARY INPUT
+    // COMMENTARY INPUT
 	bool RequestCommentary(CommentaryRequestInfoV01 &info) { return false; }
 
 	// VIDEO EXPORT (sorry, no example code at this time)
@@ -103,30 +103,6 @@ private:
 
     float mET;                             /* needed for the hardware example */
 	bool mEnabled;                         /* needed for the hardware example */
-
-    bool in_realtime = false;              /* Are we in cockpit? As opposed to monitor */
-    bool green_flag = false;               /* Is the race in green flag condition? */
-    unsigned int last_pos = 0;             /* Meters around the track of the current lap */
-    unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
-    double current_delta_best = NULL;      /* Current calculated delta best time */
-    double prev_lap_dist = 0;              /* Used to accurately calculate dt and */
-    double prev_current_et = 0;            /*   speed of last interval */
-
-    /* Keeps information about last and best laps */
-    struct LapTime {
-        double elapsed[50000];             /* Longest possible track is 50km */
-        double final = NULL;
-        double started = NULL;
-        double ended = NULL;
-        double interval_offset = 0.0;
-    } best_lap, last_lap;
-
-    FILE* out_file;
-
-    // DirectX 9 objects, to render some text on screen
-    LPD3DXFONT g_Font = NULL;
-    D3DXFONT_DESC FontDesc;
-    RECT FontPosition;
 
 };
 

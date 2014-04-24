@@ -27,7 +27,31 @@ PluginObject * __cdecl CreatePluginObject()            { return((PluginObject *)
 extern "C" __declspec(dllexport)
 void __cdecl DestroyPluginObject(PluginObject *obj)  { delete((DeltaBestPlugin *)obj); }
 
+bool in_realtime = false;              /* Are we in cockpit? As opposed to monitor */
+bool green_flag = false;               /* Is the race in green flag condition? */
+unsigned int last_pos = 0;             /* Meters around the track of the current lap */
+unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
+double current_delta_best = NULL;      /* Current calculated delta best time */
+double prev_lap_dist = 0;              /* Used to accurately calculate dt and */
+double prev_current_et = 0;            /*   speed of last interval */
 
+/* Keeps information about last and best laps */
+struct LapTime {
+    double elapsed[50000];             /* Longest possible track is 50km */
+    double final;
+    double started;
+    double ended;
+    double interval_offset;
+} best_lap, last_lap;
+
+#ifdef ENABLE_LOG
+FILE* out_file;
+#endif
+
+// DirectX 9 objects, to render some text on screen
+LPD3DXFONT g_Font = NULL;
+D3DXFONT_DESC FontDesc = { 48, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, "Arial Black" };
+RECT FontPosition;
 
 //
 // DeltaBestPlugin class
@@ -186,7 +210,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 		/* If there's a lap in progress, save the delta updates */
 		if (last_lap.started > 0.0) {
-			unsigned int meters = round(vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0);
+			unsigned int meters = (int) (vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0);
 
 			/* It could be that we have stopped our vehicle.
 			   In that case (same array position), we want to
@@ -237,8 +261,6 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
 {
-    FontDesc = { 48, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, "Arial Black" };
-
     // Now we know screen X/Y, we can place the text somewhere specific:
 	// 4/5th of the screen height
 	FontPosition.top = info.mHeight / 6.0;
@@ -304,6 +326,23 @@ double DeltaBestPlugin::CalculateDeltaBest()
 		delta_best = -99.0;
 
 	return delta_best;
+}
+
+/* FIXME Doesn't work?? */
+bool WantsToDisplayMessage( MessageInfoV01 &msgInfo )
+{
+    static bool displayed_welcome = false;
+    static const char message_text[128] = "DeltaBest plugin enabled\n";
+
+    if (! displayed_welcome) {
+        displayed_welcome = true;
+        msgInfo.mDestination = 1;
+        msgInfo.mTranslate = 0;
+        strncpy(msgInfo.mText, message_text, sizeof(message_text));
+        return true;
+    }
+
+    return false;
 }
 
 void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
