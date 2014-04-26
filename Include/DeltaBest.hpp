@@ -7,17 +7,18 @@
 
 #include "InternalsPlugin.hpp"
 #include <assert.h>
-#include <math.h>               // for rand()
-#include <stdio.h>              // for sample output
-#include <d3dx9.h>              // DirectX9 main header
+#include <math.h>               /* for rand() */
+#include <stdio.h>              /* for sample output */
+#include <d3dx9.h>              /* DirectX9 main header */
 
 
-#undef ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
+#undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
 #define GREEN_FLAG 5
+#define DELTA_BEST_FONT "Arial Black"
 
 
 // This is used for the app to use the plugin for its intended purpose
-class DeltaBestPlugin : public InternalsPluginV06
+class DeltaBestPlugin : public InternalsPluginV05
 {
 
 public:
@@ -41,16 +42,16 @@ public:
 	long WantsTelemetryUpdates() { return 0; }
 	void UpdateTelemetry(const TelemInfoV01 &info) { }
 
-	bool WantsGraphicsUpdates() { return false; }
+    bool WantsGraphicsUpdates() { return false; }
 	void UpdateGraphics(const GraphicsInfoV02 &info) { }
 
 	// GAME INPUT
 	bool HasHardwareInputs() { return false; }
-	void UpdateHardware(const float fDT) { mET += fDT; } // update the hardware with the time between frames
+	void UpdateHardware(const float fDT) { mET += fDT; }   // update the hardware with the time between frames
 	void EnableHardware() { mEnabled = true; }             // message from game to enable hardware
 	void DisableHardware() { mEnabled = false; }           // message from game to disable hardware
 
-	// See if the plugin wants to take over a hardware control.  If the plugin takes over the
+    // See if the plugin wants to take over a hardware control.  If the plugin takes over the
 	// control, this method returns true and sets the value of the float pointed to by the
 	// second arg.  Otherwise, it returns false and leaves the float unmodified.
 	bool CheckHWControl(const char * const controlName, float &fRetVal) { return false;	}
@@ -96,6 +97,8 @@ private:
 	bool NeedToDisplay();
     void WriteLog(const char * const msg);
     D3DCOLOR TextColor(double deltaBest);
+    D3DCOLOR TextColorDifferential(unsigned int t1, unsigned int t2);
+    D3DCOLOR TextColorDifferential2();
 
     //
     // Current status

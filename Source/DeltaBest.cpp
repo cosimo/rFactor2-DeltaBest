@@ -10,25 +10,23 @@
 // plugin information
 
 extern "C" __declspec(dllexport)
-const char * __cdecl GetPluginName()                   { return("rF2 Delta Best - 2014.04.20"); }
+const char * __cdecl GetPluginName()                   { return("rF2 Delta Best - 2014.04.24"); }
 
 extern "C" __declspec(dllexport)
 PluginObjectType __cdecl GetPluginType()               { return(PO_INTERNALS); }
 
-// InternalsPluginV05 only functionality would be required,
-// but v6 gives us 10hz scoring updates, so we go for 6 instead of 5
-// XXX Ehm, should give us 10hz scoring updates, but doesn't.
 extern "C" __declspec(dllexport)
-int __cdecl GetPluginVersion()                         { return 6; }
+int __cdecl GetPluginVersion()                         { return 5; }
 
 extern "C" __declspec(dllexport)
 PluginObject * __cdecl CreatePluginObject()            { return((PluginObject *) new DeltaBestPlugin); }
 
 extern "C" __declspec(dllexport)
-void __cdecl DestroyPluginObject(PluginObject *obj)  { delete((DeltaBestPlugin *)obj); }
+void __cdecl DestroyPluginObject(PluginObject *obj)    { delete((DeltaBestPlugin *)obj); }
 
 bool in_realtime = false;              /* Are we in cockpit? As opposed to monitor */
 bool green_flag = false;               /* Is the race in green flag condition? */
+unsigned int prev_pos = 0;             /* Meters around the track of the current lap (previous interval) */
 unsigned int last_pos = 0;             /* Meters around the track of the current lap */
 unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
 double current_delta_best = NULL;      /* Current calculated delta best time */
@@ -50,8 +48,8 @@ FILE* out_file;
 
 // DirectX 9 objects, to render some text on screen
 LPD3DXFONT g_Font = NULL;
-D3DXFONT_DESC FontDesc = { 48, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, "Arial Black" };
-RECT FontPosition;
+D3DXFONT_DESC FontDesc = { 48, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, DELTA_BEST_FONT };
+RECT FontPosition, ShadowPosition;
 
 //
 // DeltaBestPlugin class
@@ -108,6 +106,20 @@ void DeltaBestPlugin::EnterRealtime()
 void DeltaBestPlugin::ExitRealtime()
 {
 	in_realtime = false;
+
+    /* Reset last lap, so we'll start from scratch next time */
+    last_lap.ended = NULL;
+    last_lap.final = NULL;
+    last_lap.started = NULL;
+    last_lap.interval_offset = 0;
+    last_lap.elapsed[0] = 0;
+
+    /* Reset delta best state */
+   	last_pos = 0;
+    prev_lap_dist = 0;
+    //prev_current_et = 0;
+    current_delta_best = 0;
+ 
 #ifdef ENABLE_LOG
     WriteLog("---EXITREALTIME---");
 #endif /* ENABLE_LOG */
@@ -125,7 +137,7 @@ bool DeltaBestPlugin::NeedToDisplay()
 	if (! green_flag)
 		return false;
 
-	// We can't display a delta best until we have a best lap recorded
+	/* We can't display a delta best until we have a best lap recorded */
 	if (! best_lap.final)
 		return false;
 
@@ -135,14 +147,13 @@ bool DeltaBestPlugin::NeedToDisplay()
 void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 {
 
-	// No scoring updates should take place if we're in the monitor
-	// as opposed to the cockpit mode
+	/* No scoring updates should take place if we're
+       in the monitor as opposed to the cockpit mode */
 	if (! in_realtime)
 		return;
 
-	// Update plugin context information, used by NeedToDisplay()
+	/* Update plugin context information, used by NeedToDisplay() */
 	green_flag = info.mGamePhase == GREEN_FLAG;
-
 
 	for (long i = 0; i < info.mNumVehicles; ++i) {
 
@@ -166,7 +177,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 		bool new_lap = (vinfo.mLapStartET != last_lap.started);
 		double curr_lap_dist = vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0;
 
-		if (new_lap) {
+        if (new_lap) {
 			
 			/* mLastLapTime is -1 when lap wasn't timed */
 			bool was_timed = vinfo.mLastLapTime > 0.0;
@@ -194,7 +205,6 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
                 fprintf(out_file, "Best LAP yet  = %.3f, started = %.3f, ended = %.3f, interval_offset = %3.f\n",
                     best_lap.final, best_lap.started, best_lap.ended, best_lap.interval_offset);
 #endif /* ENABLE_LOG */
-
 			}
 
 			/* Prepare to archive the new lap */
@@ -203,7 +213,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 			last_lap.ended = NULL;
 			last_lap.interval_offset = info.mCurrentET - vinfo.mLapStartET;
 			last_lap.elapsed[0] = 0;
-			last_pos = 0;
+			last_pos = prev_pos = 0;
 			prev_lap_dist = 0;
 			/* Leave prev_current_et alone, or you have hyper-jumps */
 		}
@@ -220,20 +230,18 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 				if (distance_traveled < 0)
 					distance_traveled = 0;
 				double time_interval = (info.mCurrentET - prev_current_et);
-				double avg_speed = (time_interval == 0)	? 0	: distance_traveled / time_interval;
 
                 if (meters == last_pos) {
                     last_lap.elapsed[meters] = info.mCurrentET - vinfo.mLapStartET;
 #ifdef ENABLE_LOG
-                    fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f [same position]\n", last_lap.elapsed[meters]);
+                    fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f [same position]\n", meters, last_lap.elapsed[meters]);
 #endif /* ENABLE_LOG */
                 }
                 else {
                     for (unsigned int i = last_pos; i <= meters; i++) {
                         /* Linear interpolation of elapsed time in relation to physical position */
                         double interval_fraction = meters == last_pos ? 1.0 : (1.0 * i - last_pos) / (1.0 * meters - last_pos);
-                        last_lap.elapsed[i] = prev_current_et + (interval_fraction * time_interval);
-                        last_lap.elapsed[i] -= vinfo.mLapStartET;
+                        last_lap.elapsed[i] = prev_current_et + (interval_fraction * time_interval) - vinfo.mLapStartET;
 #ifdef ENABLE_LOG
                         fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f (interval_fraction=%.3f)\n", i, last_lap.elapsed[i], interval_fraction);
 #endif /* ENABLE_LOG */
@@ -241,11 +249,12 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
                 }
 
 #ifdef ENABLE_LOG
-				fprintf(out_file, "[DELTA] distance_traveled=%.3f time_interval=%.3f avg_speed=%.3f [%d .. %d]\n",
-					distance_traveled, time_interval, avg_speed, last_pos, meters);
+				fprintf(out_file, "[DELTA] distance_traveled=%.3f time_interval=%.3f [%d .. %d]\n",
+					distance_traveled, time_interval, last_pos, meters);
 #endif /* ENABLE_LOG */
 			}
 
+            prev_pos = last_pos;
 			last_pos = meters;
 		}
 
@@ -261,12 +270,16 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
 {
-    // Now we know screen X/Y, we can place the text somewhere specific:
-	// 4/5th of the screen height
+    /* Now we know screen X/Y, we can place the text somewhere
+       specific (in height) */
 	FontPosition.top = info.mHeight / 6.0;
 	FontPosition.left = 0;
 	FontPosition.right = info.mWidth;
 	FontPosition.bottom = info.mHeight;
+
+    ShadowPosition = FontPosition;
+    ShadowPosition.top += 2;
+    ShadowPosition.left += 2;
 
 	D3DXCreateFontIndirect((LPDIRECT3DDEVICE9) info.mDevice, &FontDesc, &g_Font);
 	assert(g_Font != NULL);
@@ -332,17 +345,17 @@ double DeltaBestPlugin::CalculateDeltaBest()
 bool WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
     static bool displayed_welcome = false;
-    static const char message_text[128] = "DeltaBest plugin enabled\n";
+    static const char message_text[128] = "DeltaBest plugin enabled!";
 
     if (! displayed_welcome) {
         displayed_welcome = true;
-        msgInfo.mDestination = 1;
+        msgInfo.mDestination = 0;
         msgInfo.mTranslate = 0;
-        strncpy(msgInfo.mText, message_text, sizeof(message_text));
+        strncpy(msgInfo.mText, message_text, strlen(message_text));
         return true;
     }
 
-    return false;
+    return true;
 }
 
 void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
@@ -359,10 +372,47 @@ void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 	if (g_Font == NULL)
 		return;
 
-    D3DCOLOR textColor = TextColor(deltaBest);
-	sprintf(lp_deltaBest, "%+2.2f", deltaBest);
-	g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition, DT_CENTER, textColor);
+//
+// Try to draw a quad on to the screen, but where exactly?
+//
+#if 0
+    #define CUSTOMFVF (D3DFVF_XYZRHW | D3DFVF_DIFFUSE)
+    struct CUSTOMVERTEX {
+        FLOAT X, Y, Z;
+        D3DCOLOR COLOR;
+        //FLOAT X, Y, Z, RHW;
+        //DWORD COLOR;
+    };
+    CUSTOMVERTEX vertices[] = {
+        { -3.0f,  3.0f, 0.0f, D3DCOLOR_XRGB(0, 0, 255), },
+        {  3.0f,  3.0f, 0.0f, D3DCOLOR_XRGB(0, 255, 0), },
+        { -3.0f, -3.0f, 0.0f, D3DCOLOR_XRGB(255, 0, 0), },
+        {  3.0f, -3.0f, 0.0f, D3DCOLOR_XRGB(0, 255, 255), },
+    }; 
 
+    // Create a vertex buffer
+    LPDIRECT3DDEVICE9 d3d = (LPDIRECT3DDEVICE9) info.mDevice;
+    IDirect3DVertexBuffer9* v_buffer;
+    VOID* p;
+    d3d->CreateVertexBuffer(4 * sizeof(CUSTOMVERTEX),
+        0, CUSTOMFVF, D3DPOOL_MANAGED, &v_buffer, NULL);
+
+    // Lock v_buffer and load the vertices into it
+    v_buffer->Lock(0, 0, (void**) &p, 0);
+    memcpy(p, vertices, sizeof(vertices));
+    v_buffer->Unlock();
+
+    d3d->SetStreamSource(0, v_buffer, 0, sizeof(CUSTOMVERTEX));
+    d3d->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 2);
+#endif
+
+    D3DCOLOR shadowColor = 0xC0585858;
+    //D3DCOLOR textColor = TextColor(deltaBest);
+    D3DCOLOR textColor = TextColorDifferential(last_pos, prev_pos);
+
+	sprintf(lp_deltaBest, "%+2.2f", deltaBest);
+    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &ShadowPosition, DT_CENTER, shadowColor);
+	g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition,  DT_CENTER, textColor);
 }
 
 D3DCOLOR DeltaBestPlugin::TextColor(double deltaBest)
@@ -377,7 +427,68 @@ D3DCOLOR DeltaBestPlugin::TextColor(double deltaBest)
     if (deltaBest > 0.05)
         return RED;
 
-    return COLOR_GRADIENT[(int)(deltaBest * 100 + 5 % 10)] | ALPHA;
+    return COLOR_GRADIENT[(int)(100 * deltaBest + 5 % 10)] | ALPHA;
+}
+
+D3DCOLOR DeltaBestPlugin::TextColorDifferential(unsigned int t1, unsigned int t2)
+{
+    static const D3DCOLOR ALPHA = 0xC0000000;
+    static const D3DCOLOR GREEN = 0x00EE00 | ALPHA;
+    static const D3DCOLOR RED   = 0xEE0000 | ALPHA;
+    static const D3DCOLOR COLOR_GRADIENT[20] = {
+        /* Greens */
+        0x22ee22, 0x33ee33, 0x44ee44, 0x66ee66, 0x88ee88, 0xaaeeaa, 0xbbeebb, 0xcceecc, 0xddeedd,
+        /* Whites */
+        0xeeeeee, 0xeeeeee,
+        /* Reds */
+        0xeedddd, 0xeecccc, 0xeebbbb, 0xeeaaaa, 0xee8888, 0xee6666, 0xee4444, 0xee3333, 0xee2222 };
+
+    /* Calculate the derivative of the best lap and the last lap.
+       If the last lap derivative grows faster, then we're losing ground.
+       If the last lap derivative grows slower, we're gaining compared to best lap. */
+
+    double last_lap_dt = last_lap.elapsed[t2] - last_lap.elapsed[t1];
+    double best_lap_dt = best_lap.elapsed[t2] - best_lap.elapsed[t1];
+    double deriv_diff = best_lap_dt - last_lap_dt;
+
+    if (deriv_diff < -0.05)
+        return GREEN;
+    if (deriv_diff > 0.05)
+        return RED;
+
+    return COLOR_GRADIENT[(int)(200 * deriv_diff + 10 % 20)] | ALPHA;
+}
+
+D3DCOLOR DeltaBestPlugin::TextColorDifferential2()
+{
+    static const D3DCOLOR ALPHA = 0xC0000000;
+    static const D3DCOLOR GREEN = 0x00EE00 | ALPHA;
+    static const D3DCOLOR RED   = 0xEE0000 | ALPHA;
+    static const D3DCOLOR COLOR_GRADIENT[20] = {
+        /* Greens */
+        0x22ee22, 0x33ee33, 0x44ee44, 0x66ee66, 0x88ee88, 0xaaeeaa, 0xbbeebb, 0xcceecc, 0xddeedd,
+        /* Whites */
+        0xeeeeee, 0xeeeeee,
+        /* Reds */
+        0xeedddd, 0xeecccc, 0xeebbbb, 0xeeaaaa, 0xee8888, 0xee6666, 0xee4444, 0xee3333, 0xee2222 };
+
+    /* Calculate the derivative of the best lap and the last lap.
+       If the last lap derivative grows faster, then we're losing ground.
+       If the last lap derivative grows slower, we're gaining compared to best lap. */
+
+    unsigned int t2 = last_pos;
+    unsigned int t1 = last_pos > 10 ? last_pos - 10 : last_pos;
+
+    double last_lap_dt = last_lap.elapsed[t2] - last_lap.elapsed[t1];
+    double best_lap_dt = best_lap.elapsed[t2] - best_lap.elapsed[t1];
+    double deriv_diff = best_lap_dt - last_lap_dt;
+
+    if (deriv_diff < -0.10)
+        return GREEN;
+    if (deriv_diff > 0.10)
+        return RED;
+
+    return COLOR_GRADIENT[(int)(100 * deriv_diff + 10 % 20)] | ALPHA;
 }
 
 void DeltaBestPlugin::PreReset(const ScreenInfoV01 &info)
