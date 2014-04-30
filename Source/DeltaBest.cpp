@@ -47,13 +47,27 @@ struct LapTime {
     double interval_offset;
 } best_lap, last_lap;
 
+#define FONT_NAME_MAXLEN 32
+
+struct PluginConfig {
+    unsigned int left;
+    unsigned int top;
+    unsigned int right;
+    unsigned int bottom;
+    unsigned int font_size;
+    char font_name[FONT_NAME_MAXLEN];
+} config;
+
 #ifdef ENABLE_LOG
 FILE* out_file;
 #endif
 
 // DirectX 9 objects, to render some text on screen
 LPD3DXFONT g_Font = NULL;
-D3DXFONT_DESC FontDesc = { 48, 0, 400, 0, false, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, DELTA_BEST_FONT };
+D3DXFONT_DESC FontDesc = {
+    DEFAULT_FONT_SIZE, 0, 400, 0, false, DEFAULT_CHARSET,
+    OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH,
+    DEFAULT_FONT_NAME };
 RECT FontPosition, ShadowPosition;
 
 //
@@ -292,12 +306,29 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
 {
+    long screen_width = info.mWidth;
+    long screen_height = info.mHeight;
+
+    LoadConfig(config, CONFIG_FILE);
+
     /* Now we know screen X/Y, we can place the text somewhere
-    specific (in height) */
-    FontPosition.top = info.mHeight / 6.0;
-    FontPosition.left = 0;
-    FontPosition.right = info.mWidth;
-    FontPosition.bottom = info.mHeight;
+    specific (in height). If everything is zero then apply our
+    defaults: (0, height/6) -> (width, height) */
+
+    if (config.right == 0)
+        config.right = screen_width;
+    if (config.bottom == 0)
+        config.bottom = screen_height;
+    if (config.top == 0)
+        config.top = screen_height / 6.0;
+
+    FontDesc.Height = config.font_size;
+    sprintf(FontDesc.FaceName, config.font_name);
+
+    FontPosition.top = config.top;
+    FontPosition.left = config.left;
+    FontPosition.right = config.right;
+    FontPosition.bottom = config.bottom;
 
     ShadowPosition = FontPosition;
     ShadowPosition.top += 2;
@@ -517,4 +548,14 @@ void DeltaBestPlugin::PostReset(const ScreenInfoV01 &info)
 {
     if (g_Font)
         g_Font->OnResetDevice();
+}
+
+void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_file)
+{
+    config.left= GetPrivateProfileInt("Display", "Left", 0, ini_file);
+    config.top = GetPrivateProfileInt("Display", "Top", 0, ini_file);
+    config.right = GetPrivateProfileInt("Display", "Right", 0, ini_file);
+    config.bottom = GetPrivateProfileInt("Display", "Bottom", 0, ini_file);
+    config.font_size = GetPrivateProfileInt("Display", "FontSize", DEFAULT_FONT_SIZE, ini_file);
+    GetPrivateProfileString("Display", "FontName", DEFAULT_FONT_NAME, config.font_name, FONT_NAME_MAXLEN, ini_file);
 }

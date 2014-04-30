@@ -11,13 +11,15 @@
 #include <stdio.h>              /* for sample output */
 #include <d3dx9.h>              /* DirectX9 main header */
 
-#define DELTA_BEST_VERSION      "v6"
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.04.28"
+#define DELTA_BEST_VERSION      "v7"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.04.30"
 #undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
 #define LOG_FILE                "Plugins\\DeltaBest.log"
+#define CONFIG_FILE             "Plugins\\DeltaBest.ini"
 #define GREEN_FLAG              5
-#define DELTA_BEST_FONT         "Arial Black"
 #define COLOR_INTENSITY         0xF0
+#define DEFAULT_FONT_SIZE       48
+#define DEFAULT_FONT_NAME       "Arial Black"
 
 /* Toggle plugin with CTRL + a magic key. Reference:
 http://msdn.microsoft.com/en-us/library/windows/desktop/dd375731%28v=vs.85%29.aspx */
@@ -103,6 +105,7 @@ public:
 private:
 
     double CalculateDeltaBest();
+    void LoadConfig(struct PluginConfig &config, const char *ini_file);
     bool NeedToDisplay();
     void WriteLog(const char * const msg);
     D3DCOLOR TextColor(double delta);
