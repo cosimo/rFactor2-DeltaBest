@@ -2,7 +2,7 @@
 rF2 Delta Best Plugin
 
 Author: Cosimo Streppone <cosimo@streppone.it>
-Date:   April 2014
+Date:   April/May 2014
 URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 
 */
@@ -13,7 +13,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 // plugin information
 
 extern "C" __declspec(dllexport)
-    const char * __cdecl GetPluginName()               { return PLUGIN_NAME; }
+    const char * __cdecl GetPluginName()                   { return PLUGIN_NAME; }
 
 extern "C" __declspec(dllexport)
     PluginObjectType __cdecl GetPluginType()               { return PO_INTERNALS; }
@@ -35,8 +35,13 @@ unsigned int prev_pos = 0;             /* Meters around the track of the current
 unsigned int last_pos = 0;             /* Meters around the track of the current lap */
 unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
 double current_delta_best = NULL;      /* Current calculated delta best time */
+double prev_delta_best = NULL;
 double prev_lap_dist = 0;              /* Used to accurately calculate dt and */
-double prev_current_et = 0;            /*   speed of last interval */
+double prev_current_et = 0;            /*     speed of last interval */
+double inbtw_scoring_traveled = 0;     /* Distance traveled (m) between successive UpdateScoring() calls */
+double inbtw_scoring_elapsed = 0;
+long render_ticks = 0;
+long render_ticks_int = 12;
 
 /* Keeps information about last and best laps */
 struct LapTime {
@@ -66,8 +71,8 @@ FILE* out_file;
 LPD3DXFONT g_Font = NULL;
 D3DXFONT_DESC FontDesc = {
     DEFAULT_FONT_SIZE, 0, 400, 0, false, DEFAULT_CHARSET,
-    OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH,
-    DEFAULT_FONT_NAME };
+    OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, DEFAULT_FONT_NAME
+};
 RECT FontPosition, ShadowPosition;
 
 //
@@ -91,10 +96,6 @@ void DeltaBestPlugin::Startup(long version)
     mEnabled = true;
 }
 
-void DeltaBestPlugin::Shutdown()
-{
-}
-
 void DeltaBestPlugin::StartSession()
 {
 #ifdef ENABLE_LOG
@@ -105,6 +106,8 @@ void DeltaBestPlugin::StartSession()
 
 void DeltaBestPlugin::EndSession()
 {
+    ResetLap(last_lap);
+    ResetLap(best_lap);
 #ifdef ENABLE_LOG
     WriteLog("--ENDSESSION--");
     if (out_file)
@@ -126,22 +129,35 @@ void DeltaBestPlugin::ExitRealtime()
 {
     in_realtime = false;
 
-    /* Reset last lap, so we'll start from scratch next time */
-    last_lap.ended = NULL;
-    last_lap.final = NULL;
-    last_lap.started = NULL;
-    last_lap.interval_offset = 0;
-    last_lap.elapsed[0] = 0;
+    /* Reset last and best lap, so we'll start from scratch next time.
+
+    TODO: keep best lap. Player could use changing setups a few times
+    and challenging the same best lap in the same session
+    */
+    ResetLap(last_lap);
+    ResetLap(best_lap);
 
     /* Reset delta best state */
     last_pos = 0;
     prev_lap_dist = 0;
     //prev_current_et = 0;
     current_delta_best = 0;
+    prev_delta_best = 0;
 
 #ifdef ENABLE_LOG
     WriteLog("---EXITREALTIME---");
 #endif /* ENABLE_LOG */
+}
+
+void DeltaBestPlugin::ResetLap(struct LapTime lap)
+{
+    lap.ended = NULL;
+    lap.final = NULL;
+    lap.started = NULL;
+    lap.interval_offset = 0;
+
+    for (unsigned int i = 0; i < sizeof(lap.elapsed); i++)
+        lap.elapsed[i] = 0;
 }
 
 bool DeltaBestPlugin::NeedToDisplay()
@@ -256,7 +272,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
         /* If there's a lap in progress, save the delta updates */
         if (last_lap.started > 0.0) {
-            unsigned int meters = (int) (vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0);
+            unsigned int meters = round(vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0);
 
             /* It could be that we have stopped our vehicle.
             In that case (same array position), we want to
@@ -274,7 +290,10 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 #endif /* ENABLE_LOG */
                 }
                 else {
-                    for (unsigned int i = last_pos; i <= meters; i++) {
+                    for (unsigned int i = last_pos; i < meters; i++) {
+                        /* Elapsed time at this position already filled in by UpdateTelemetry()? */
+                        if (last_lap.elapsed[i] > 0.0)
+                            continue;
                         /* Linear interpolation of elapsed time in relation to physical position */
                         double interval_fraction = meters == last_pos ? 1.0 : (1.0 * i - last_pos) / (1.0 * meters - last_pos);
                         last_lap.elapsed[i] = prev_current_et + (interval_fraction * time_interval) - vinfo.mLapStartET;
@@ -282,6 +301,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
                         fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f (interval_fraction=%.3f)\n", i, last_lap.elapsed[i], interval_fraction);
 #endif /* ENABLE_LOG */
                     }
+                    last_lap.elapsed[meters] = info.mCurrentET - vinfo.mLapStartET;
                 }
 
 #ifdef ENABLE_LOG
@@ -298,10 +318,52 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
             prev_lap_dist = curr_lap_dist;
 
         prev_current_et = info.mCurrentET;
-        current_delta_best = CalculateDeltaBest();
 
+        //prev_delta_best = current_delta_best;
+        //current_delta_best = CalculateDeltaBest2();
+
+        inbtw_scoring_traveled = 0;
+        inbtw_scoring_elapsed = 0;
     }
 
+}
+
+/* We use UpdateTelemetry() to gain notable precision in position updates.
+We assume that (-1.0 * LocalVelocity.z) is the forward speed of the
+vehicle, which seems to be confirmed by observed data.
+
+Having forward speed means that with a delta-t we can directly measure
+the distance traveled at 20hz instead of 5hz of UpdateScoring().
+
+We use this data to complete information on vehicle lap progress
+between successive UpdateScoring() calls.
+*/
+
+void DeltaBestPlugin::UpdateTelemetry(const TelemInfoV01 &info)
+{
+    if (! in_realtime)
+        return;
+
+    double dt = info.mDeltaTime;
+    double forward_speed = - info.mLocalVel.z;
+    double distance = forward_speed * dt;
+
+    inbtw_scoring_traveled += distance;
+    inbtw_scoring_elapsed  += dt;
+
+    unsigned int inbtw_pos = round(last_pos + inbtw_scoring_traveled);
+    if (inbtw_pos > last_pos) {
+        last_lap.elapsed[inbtw_pos] = last_lap.elapsed[last_pos] + inbtw_scoring_elapsed;
+#ifdef ENABLE_LOG
+        fprintf(out_file, "\tNEW inbtw pos=%d elapsed=%.3f (last_pos=%d, t=%.3f, acc_t=%.3f)\n",
+            inbtw_pos, inbtw_scoring_elapsed, last_pos, last_lap.elapsed[last_pos], last_lap.elapsed[inbtw_pos]);
+#endif /* ENABLE_LOG */
+    }
+
+#ifdef ENABLE_LOG
+    fprintf(out_file, "\tdt=%.3f fwd_speed=%.3f dist=%.3f inbtw_scoring_traveled=%.3f last_pos(m)=%d\n",
+        dt, forward_speed, distance, inbtw_scoring_traveled, last_pos);
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
@@ -371,10 +433,33 @@ void DeltaBestPlugin::ReactivateScreen(const ScreenInfoV01& info)
 double DeltaBestPlugin::CalculateDeltaBest()
 {
     /* Shouldn't really happen */
-    if (!best_lap.final)
+    if (! best_lap.final)
         return 0;
 
     unsigned int m = last_pos;            /* Current position in meters around the track */
+
+    /* By using meters, and backfilling all the missing information,
+    it shouldn't be possible to not have the exact same position in the best lap */
+    double last_time_at_pos = last_lap.elapsed[m];
+    double best_time_at_pos = best_lap.elapsed[m];
+    double delta_best = last_time_at_pos - best_time_at_pos;
+
+    if (delta_best > 99.0)
+        delta_best = 99.0;
+    else if (delta_best < -99)
+        delta_best = -99.0;
+
+    return delta_best;
+}
+
+double DeltaBestPlugin::CalculateDeltaBest2()
+{
+    /* Shouldn't really happen */
+    if (! best_lap.final)
+        return 0;
+
+    /* Current position in meters around the track */
+    int m = round(last_pos + inbtw_scoring_traveled);
 
     /* By using meters, and backfilling all the missing information,
     it shouldn't be possible to not have the exact same position in the best lap */
@@ -414,8 +499,8 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 
 void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 {
+
     char lp_deltaBest[15] = "";
-    double deltaBest = current_delta_best;
 
     /* If we're not in realtime, not in green flag, etc...
     there's no need to display the Delta Best time */
@@ -425,6 +510,32 @@ void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
     /* Can't draw without a font object */
     if (g_Font == NULL)
         return;
+
+    double delta = current_delta_best;
+
+    /* Calculate the new delta best every n ticks
+       and display a suitable value to get there in n ticks */
+    if (render_ticks % render_ticks_int == 0) {
+        prev_delta_best = current_delta_best;
+        current_delta_best = CalculateDeltaBest2();
+        double diff = current_delta_best - delta;
+        double abs_diff = abs(diff);
+
+        if (abs_diff > 1.0) {
+            delta = current_delta_best;
+        }
+        else {
+            render_ticks_int = 16;
+            if (abs_diff > 0.25)
+                render_ticks_int = 1;
+            else if (abs_diff > 0.1)
+                render_ticks_int = 8;
+            delta += diff < 0 ? -0.01 : 0.01;
+            current_delta_best = delta;
+        }
+    }
+
+    render_ticks++;
 
     //
     // Try to draw a quad on to the screen, but where exactly?
@@ -462,12 +573,13 @@ void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 #endif
 
     D3DCOLOR shadowColor = 0xC0585858;
-    D3DCOLOR textColor = TextColor(deltaBest);
+    D3DCOLOR textColor = TextColor(delta);
     //D3DCOLOR textColor = TextColorDifferential3();
 
-    sprintf(lp_deltaBest, "%+2.2f", deltaBest);
+    sprintf(lp_deltaBest, "%+2.2f", delta);
     g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &ShadowPosition, DT_CENTER, shadowColor);
     g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition,   DT_CENTER, textColor);
+
 }
 
 /* Simple style: negative delta = green, positive delta = red */

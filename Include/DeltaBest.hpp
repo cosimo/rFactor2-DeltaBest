@@ -10,15 +10,16 @@
 #include <math.h>               /* for rand() */
 #include <stdio.h>              /* for sample output */
 #include <d3dx9.h>              /* DirectX9 main header */
+#include <cmath>
 
-#define DELTA_BEST_VERSION      "v7"
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.04.30"
+#define DELTA_BEST_VERSION      "v8-dev"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.05.03"
 #undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
 #define LOG_FILE                "Plugins\\DeltaBest.log"
 #define CONFIG_FILE             "Plugins\\DeltaBest.ini"
 #define GREEN_FLAG              5
 #define COLOR_INTENSITY         0xF0
-#define DEFAULT_FONT_SIZE       48
+#define DEFAULT_FONT_SIZE       60
 #define DEFAULT_FONT_NAME       "Arial Black"
 
 /* Toggle plugin with CTRL + a magic key. Reference:
@@ -39,7 +40,7 @@ public:
     // These are the functions derived from base class InternalsPlugin
     // that can be implemented.
     void Startup(long version);    // game startup
-    void Shutdown();               // game shutdown
+    void Shutdown() {};            // game shutdown
 
     void EnterRealtime();          // entering realtime
     void ExitRealtime();           // exiting realtime
@@ -48,8 +49,8 @@ public:
     void EndSession();             // session has ended
 
     // GAME OUTPUT
-    long WantsTelemetryUpdates() { return 0; }
-    void UpdateTelemetry(const TelemInfoV01 &info) { }
+    long WantsTelemetryUpdates() { return 1; }             /* 1 = Player only */
+    void UpdateTelemetry(const TelemInfoV01 &info);
 
     bool WantsGraphicsUpdates() { return false; }
     void UpdateGraphics(const GraphicsInfoV02 &info) { }
@@ -105,8 +106,10 @@ public:
 private:
 
     double CalculateDeltaBest();
+    double CalculateDeltaBest2();
     void LoadConfig(struct PluginConfig &config, const char *ini_file);
     bool NeedToDisplay();
+    void ResetLap(struct LapTime lap);
     void WriteLog(const char * const msg);
     D3DCOLOR TextColor(double delta);
     D3DCOLOR TextColorDifferential(unsigned int t1, unsigned int t2);
@@ -121,5 +124,7 @@ private:
     bool mEnabled;                         /* needed for the hardware example */
 
 };
+
+inline int round(float x) { return (floor(x + 0.5)); }
 
 #endif // _INTERNALS_EXAMPLE_H
