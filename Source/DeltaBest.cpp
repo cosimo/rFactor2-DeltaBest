@@ -74,6 +74,8 @@ D3DXFONT_DESC FontDesc = {
     OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, DEFAULT_FONT_NAME
 };
 RECT FontPosition, ShadowPosition;
+LPD3DXSPRITE bar = NULL;
+LPDIRECT3DTEXTURE9 texture = NULL;
 
 //
 // DeltaBestPlugin class
@@ -382,7 +384,7 @@ void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
     if (config.bottom == 0)
         config.bottom = screen_height;
     if (config.top == 0)
-        config.top = screen_height / 6.0;
+        config.top = 148; // screen_height / 6.0;
 
     FontDesc.Height = config.font_size;
     sprintf(FontDesc.FaceName, config.font_name);
@@ -399,6 +401,12 @@ void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
     D3DXCreateFontIndirect((LPDIRECT3DDEVICE9) info.mDevice, &FontDesc, &g_Font);
     assert(g_Font != NULL);
 
+    D3DXCreateTextureFromFile((LPDIRECT3DDEVICE9) info.mDevice, "Plugins\\DeltaBestBackground.png", &texture);
+    D3DXCreateSprite((LPDIRECT3DDEVICE9) info.mDevice, &bar);
+
+    assert(texture != NULL);
+    assert(bar != NULL);
+
 #ifdef ENABLE_LOG
     WriteLog("---INIT SCREEN---");
 #endif /* ENABLE_LOG */
@@ -410,6 +418,14 @@ void DeltaBestPlugin::UninitScreen(const ScreenInfoV01& info)
     if (g_Font) {
         g_Font->Release();
         g_Font = NULL;
+    }
+    if (bar) {
+        bar->Release();
+        bar = NULL;
+    }
+    if (texture) {
+        texture->Release();
+        texture = NULL;
     }
 #ifdef ENABLE_LOG
     WriteLog("---UNINIT SCREEN---");
@@ -497,10 +513,98 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
     return true;
 }
 
+void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff)
+{
+    LPDIRECT3DDEVICE9 d3d = (LPDIRECT3DDEVICE9) info.mDevice;
+
+    // mirror width = 580px (670, 10) -> (1250, 120)
+    // bar  = 580 x 20 (670, 130) -> (1250, 150)
+    // center.x = 860; // 1920/2
+    // time = (center-100, 155) -> (center+100, 190)
+
+    D3DXVECTOR3 bar_pos, time_pos;
+
+    bar_pos.x = 670;
+    bar_pos.y = 130;
+    bar_pos.z = 0;
+
+    time_pos.x = 900;
+    time_pos.y = 155;
+    time_pos.z = 0;
+
+    bar->Begin(D3DXSPRITE_ALPHABLEND);
+
+    RECT bar_rect = { 0, 0, 580, 20 };
+    RECT time_rect = { 0, 0, 120, 35 };
+    D3DCOLOR bar_grey = D3DCOLOR_RGBA(0x60, 0x60, 0x60, 0xFF);
+
+    bar->Draw(texture, &bar_rect,  NULL, &bar_pos,  bar_grey);
+
+    // Draw delta bar
+    D3DCOLOR delta_bar_color;
+    D3DXVECTOR3 delta_pos;
+    RECT delta_size = { 0, 0, 0, 20 };
+
+    delta_bar_color = BarColor(delta, delta_diff);
+    delta_pos.z = 0;
+    delta_pos.y = 130;
+
+    if (delta > 0) {
+        delta_pos.x = info.mWidth / 2.0;
+        int size = delta > 2 ? 290 : (290 * (delta / 2.0));
+        delta_size.right = size;
+    }
+    else if (delta < 0) {
+        double half_screen = info.mWidth / 2.0;
+        delta_pos.x = delta < -2 ? 670 : (half_screen - (half_screen - 670) * (-delta/2.0));
+        int size = half_screen - delta_pos.x;
+        delta_size.right = size;
+    }
+
+    bar->Draw(texture, &delta_size, NULL, &delta_pos, delta_bar_color);
+
+    // Draw the time text ("-0.18")
+
+    D3DCOLOR shadowColor = 0xC0585858;
+    D3DCOLOR textColor = TextColor(delta);
+
+    char lp_deltaBest[15] = "";
+    long text_rect_center = delta_pos.x + (delta_size.right / 2);
+    const long text_rect_width = 120;
+    const long bar_max_width = 580;
+
+    text_rect_center = max(text_rect_center, (info.mWidth - bar_max_width) / 2);
+
+    time_pos.x = text_rect_center - text_rect_width / 2;
+    time_rect.right = text_rect_width;
+
+    bar->Draw(texture, &time_rect, NULL, &time_pos, bar_grey);
+    bar->End();
+
+    FontPosition.left = time_pos.x;
+    FontPosition.right = FontPosition.left + text_rect_width;
+
+    ShadowPosition.left = FontPosition.left + 2;
+    ShadowPosition.right = FontPosition.right + 2;
+
+    sprintf(lp_deltaBest, "%+2.2f", delta);
+    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &ShadowPosition, DT_CENTER, shadowColor);
+    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition,   DT_CENTER, textColor);
+
+}
+
 void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 {
 
-    char lp_deltaBest[15] = "";
+    /* If we're not in realtime, not in green flag, etc...
+    there's no need to display the Delta Best time */
+    if (! NeedToDisplay())
+        return;
+
+}
+
+void DeltaBestPlugin::RenderScreenBeforeOverlays(const ScreenInfoV01 &info)
+{
 
     /* If we're not in realtime, not in green flag, etc...
     there's no need to display the Delta Best time */
@@ -512,13 +616,14 @@ void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
         return;
 
     double delta = current_delta_best;
+    double diff = current_delta_best - prev_delta_best;
 
     /* Calculate the new delta best every n ticks
        and display a suitable value to get there in n ticks */
     if (render_ticks % render_ticks_int == 0) {
         prev_delta_best = current_delta_best;
         current_delta_best = CalculateDeltaBest2();
-        double diff = current_delta_best - delta;
+        diff = current_delta_best - delta;
         double abs_diff = abs(diff);
 
         if (abs_diff > 1.0) {
@@ -537,55 +642,13 @@ void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 
     render_ticks++;
 
-    //
-    // Try to draw a quad on to the screen, but where exactly?
-    // This should draw a background grey rectangle behind the delta time.
-    //
-#if 0
-#define CUSTOMFVF (D3DFVF_XYZRHW | D3DFVF_DIFFUSE)
-    struct CUSTOMVERTEX {
-        FLOAT X, Y, Z;
-        D3DCOLOR COLOR;
-        //FLOAT X, Y, Z, RHW;
-        //DWORD COLOR;
-    };
-    CUSTOMVERTEX vertices[] = {
-        { -3.0f,  3.0f, 0.0f, D3DCOLOR_XRGB(0, 0, 255), },
-        {  3.0f,  3.0f, 0.0f, D3DCOLOR_XRGB(0, 255, 0), },
-        { -3.0f, -3.0f, 0.0f, D3DCOLOR_XRGB(255, 0, 0), },
-        {  3.0f, -3.0f, 0.0f, D3DCOLOR_XRGB(0, 255, 255), },
-    }; 
-
-    // Create a vertex buffer
-    LPDIRECT3DDEVICE9 d3d = (LPDIRECT3DDEVICE9) info.mDevice;
-    IDirect3DVertexBuffer9* v_buffer;
-    VOID* p;
-    d3d->CreateVertexBuffer(4 * sizeof(CUSTOMVERTEX),
-        0, CUSTOMFVF, D3DPOOL_MANAGED, &v_buffer, NULL);
-
-    // Lock v_buffer and load the vertices into it
-    v_buffer->Lock(0, 0, (void**) &p, 0);
-    memcpy(p, vertices, sizeof(vertices));
-    v_buffer->Unlock();
-
-    d3d->SetStreamSource(0, v_buffer, 0, sizeof(CUSTOMVERTEX));
-    d3d->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 2);
-#endif
-
-    D3DCOLOR shadowColor = 0xC0585858;
-    D3DCOLOR textColor = TextColor(delta);
-    //D3DCOLOR textColor = TextColorDifferential3();
-
-    sprintf(lp_deltaBest, "%+2.2f", delta);
-    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &ShadowPosition, DT_CENTER, shadowColor);
-    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition,   DT_CENTER, textColor);
-
+    DrawDeltaBar(info, delta, diff);
 }
 
 /* Simple style: negative delta = green, positive delta = red */
 D3DCOLOR DeltaBestPlugin::TextColor(double delta)
 {
-    D3DCOLOR text_color = 0xD0000000;      /* Alpha (transparency) value */
+    D3DCOLOR text_color = 0xE0000000;      /* Alpha (transparency) value */
     bool is_negative = delta < 0;
     double cutoff_val = 0.10;
     double abs_val = abs(delta);
@@ -606,60 +669,41 @@ D3DCOLOR DeltaBestPlugin::TextColor(double delta)
     return text_color;
 }
 
-/* iRacing-style, take 3 */
-D3DCOLOR DeltaBestPlugin::TextColorDifferential3()
+D3DCOLOR DeltaBestPlugin::BarColor(double delta, double delta_diff)
 {
-    static const D3DCOLOR ALPHA = 0xD0000000;
+    static const D3DCOLOR ALPHA = 0xE0000000;
+    bool is_gaining = delta_diff > 0;
+    D3DCOLOR bar_color = ALPHA;
+    bar_color |= is_gaining ? (COLOR_INTENSITY << 16) : (COLOR_INTENSITY << 8);
 
-    /* Calculate the derivative of the best lap and the last lap.
-    If the last lap derivative grows faster, then we're losing ground.
-    If the last lap derivative grows slower, we're gaining compared to best lap. */
-
-    unsigned int t2 = last_pos;
-    unsigned int t1 = prev_pos;
-    double last_lap_dt = last_lap.elapsed[t2] - last_lap.elapsed[t1];
-    double best_lap_dt = best_lap.elapsed[t2] - best_lap.elapsed[t1];
-    double deriv_diff = best_lap_dt - last_lap_dt;
-    bool is_negative = deriv_diff <= 0;
-
-    D3DCOLOR text_color = ALPHA;
-    text_color |= is_negative ? (COLOR_INTENSITY << 16) : (COLOR_INTENSITY << 8);
-
-#ifdef ENABLE_LOG
-    fprintf(out_file, "t1=%d t2=%d lap[t1]=%.3f lap[t2]=%.3f deriv_diff=%.3f\n",
-        t1, t2, last_lap.elapsed[t1], last_lap.elapsed[t2], deriv_diff);
-#endif
-
-    double abs_val = abs(deriv_diff);
-    if (abs_val < 0.05)
-        abs_val = 0;
-    double cutoff_val = 0.15;
+    double abs_val = abs(delta_diff);
+    double cutoff_val = 0.02;
 
     if (abs_val <= cutoff_val) {
         unsigned int col_val = COLOR_INTENSITY * (1 / cutoff_val) * (cutoff_val - abs_val);
-        if (is_negative)
-            text_color |= (col_val << 8) + col_val;
+        if (is_gaining)
+            bar_color |= (col_val << 8) + col_val;
         else
-            text_color |= (col_val << 16) + col_val;
-#ifdef ENABLE_LOG
-        fprintf(out_file, "abs_val=%.2f col_val=%d is_neg=%d col=%X\n",
-            abs_val, col_val, is_negative ? 1 : 0, text_color);
-#endif
+            bar_color |= (col_val << 16) + col_val;
     }
 
-    return text_color;
+    return bar_color;
 }
 
 void DeltaBestPlugin::PreReset(const ScreenInfoV01 &info)
 {
     if (g_Font)
         g_Font->OnLostDevice();
+    if (bar)
+        bar->OnLostDevice();
 }
 
 void DeltaBestPlugin::PostReset(const ScreenInfoV01 &info)
 {
     if (g_Font)
         g_Font->OnResetDevice();
+    if (bar)
+        bar->OnResetDevice();
 }
 
 void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_file)

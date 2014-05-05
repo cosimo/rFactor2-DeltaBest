@@ -13,13 +13,13 @@
 #include <cmath>
 
 #define DELTA_BEST_VERSION      "v8-dev"
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.05.03"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.05.04"
 #undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
 #define LOG_FILE                "Plugins\\DeltaBest.log"
 #define CONFIG_FILE             "Plugins\\DeltaBest.ini"
 #define GREEN_FLAG              5
 #define COLOR_INTENSITY         0xF0
-#define DEFAULT_FONT_SIZE       60
+#define DEFAULT_FONT_SIZE       48
 #define DEFAULT_FONT_NAME       "Arial Black"
 
 /* Toggle plugin with CTRL + a magic key. Reference:
@@ -94,7 +94,7 @@ public:
     void DeactivateScreen(const ScreenInfoV01 &info);            // Window deactivation
     void ReactivateScreen(const ScreenInfoV01 &info);            // Window reactivation
 
-    void RenderScreenBeforeOverlays(const ScreenInfoV01 &info){} // before rFactor overlays
+    void RenderScreenBeforeOverlays(const ScreenInfoV01 &info);  // before rFactor overlays
     void RenderScreenAfterOverlays(const ScreenInfoV01 &info);   // after rFactor overlays
 
     void PreReset(const ScreenInfoV01 &info);					 // after detecting device lost but before resetting
@@ -107,14 +107,16 @@ private:
 
     double CalculateDeltaBest();
     double CalculateDeltaBest2();
+    void DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff);
     void LoadConfig(struct PluginConfig &config, const char *ini_file);
     bool NeedToDisplay();
     void ResetLap(struct LapTime lap);
     void WriteLog(const char * const msg);
     D3DCOLOR TextColor(double delta);
+    D3DCOLOR BarColor(double delta, double delta_diff);
     D3DCOLOR TextColorDifferential(unsigned int t1, unsigned int t2);
     D3DCOLOR TextColorDifferential2();
-    D3DCOLOR TextColorDifferential3();
+    //D3DCOLOR TextColorDifferential3();
 
     //
     // Current status
