@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin
-==========================
+rFactor2 Delta Best plugin (v8-DEV)
+===================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/04/30
+Last update: 2014/05/06
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Working, possibly with bugs. Not that many anymore.
 
@@ -31,10 +31,14 @@ between the current lap and your best lap of the current session.
 
 == Status ==
 
-Currently it works decently. Due to the way scoring updates work
-in rF2 (every 0.2s) is not super accurate, but I tried to do some
-interpolation of speed and position values, so it should be
-already quite accurate.
+Currently it works. It is quite accurate, but sometimes the
+delta time reading goes off for an instant. That has to be fixed.
+There's also a dynamic colored bar that shows exactly where
+you are losing (red) or gaining time (green), regardless of your
+actual difference to best lap.
+
+That is quite an effective way to improve your lap times,
+and get to learn a track.
 
 == Customizing plugin position and appearance ==
 
