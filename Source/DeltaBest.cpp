@@ -55,16 +55,22 @@ struct LapTime {
 #define FONT_NAME_MAXLEN 32
 
 struct PluginConfig {
+
+    bool bar_enabled;
     unsigned int bar_left;
     unsigned int bar_top;
     unsigned int bar_width;
     unsigned int bar_height;
     unsigned int bar_gutter;
+
+    bool time_enabled;
     unsigned int time_top;
     unsigned int time_width;
     unsigned int time_height;
     unsigned int time_font_size;
     char time_font_name[FONT_NAME_MAXLEN];
+
+    unsigned int keyboard_magic;
 } config;
 
 #ifdef ENABLE_LOG
@@ -198,7 +204,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
         return;
 
     /* Toggle shortcut key. Turns off/on the display of delta time */
-    if (KEY_DOWN(MAGIC_KEY))
+    if (KEY_DOWN(config.keyboard_magic))
         key_switch = ! key_switch;
 
     /* Update plugin context information, used by NeedToDisplay() */
@@ -325,9 +331,6 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
         prev_current_et = info.mCurrentET;
 
-        //prev_delta_best = current_delta_best;
-        //current_delta_best = CalculateDeltaBest2();
-
         inbtw_scoring_traveled = 0;
         inbtw_scoring_elapsed = 0;
     }
@@ -389,17 +392,12 @@ void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
     if (config.time_top == 0)
         config.time_top = screen_height / 6.0;
 
+    //config.bar_left = GetPrivateProfileInt("Bar", "Left", 0, ini_file);
+    //config.bar_top = GetPrivateProfileInt("Bar", "Top", 0, ini_file);
+    //config.time_top = GetPrivateProfileInt("Time", "Top", 0, ini_file);
+
     FontDesc.Height = config.time_font_size;
     sprintf(FontDesc.FaceName, config.time_font_name);
-
-    FontPosition.top = config.time_top;
-    FontPosition.left = screen_width / 2.0;
-    FontPosition.right = config.time_width;
-    FontPosition.bottom = config.time_height;
-
-    ShadowPosition = FontPosition;
-    ShadowPosition.top += 2;
-    ShadowPosition.left += 2;
 
     D3DXCreateFontIndirect((LPDIRECT3DDEVICE9) info.mDevice, &FontDesc, &g_Font);
     assert(g_Font != NULL);
@@ -455,28 +453,6 @@ double DeltaBestPlugin::CalculateDeltaBest()
     if (! best_lap.final)
         return 0;
 
-    unsigned int m = last_pos;            /* Current position in meters around the track */
-
-    /* By using meters, and backfilling all the missing information,
-    it shouldn't be possible to not have the exact same position in the best lap */
-    double last_time_at_pos = last_lap.elapsed[m];
-    double best_time_at_pos = best_lap.elapsed[m];
-    double delta_best = last_time_at_pos - best_time_at_pos;
-
-    if (delta_best > 99.0)
-        delta_best = 99.0;
-    else if (delta_best < -99)
-        delta_best = -99.0;
-
-    return delta_best;
-}
-
-double DeltaBestPlugin::CalculateDeltaBest2()
-{
-    /* Shouldn't really happen */
-    if (! best_lap.final)
-        return 0;
-
     /* Current position in meters around the track */
     int m = round(last_pos + inbtw_scoring_traveled);
 
@@ -524,112 +500,135 @@ void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, doub
     const float SCREEN_HEIGHT   = info.mHeight;
     const float SCREEN_CENTER   = SCREEN_WIDTH / 2.0;
 
-    const float BAR_WIDTH       = 580;
-    const float BAR_TOP         = 130;
+    const float BAR_WIDTH       = config.bar_width;
+    const float BAR_TOP         = config.bar_top;
+    const float BAR_HEIGHT      = config.bar_height;
+    const float BAR_TIME_GUTTER = config.bar_gutter;
+    const float TIME_WIDTH      = config.time_width;
+    const float TIME_HEIGHT     = config.time_height;
+
+    // Computed positions, sizes
     const float BAR_LEFT        = (SCREEN_WIDTH - BAR_WIDTH) / 2.0;
-    const float BAR_HEIGHT      = 20;
-    const float BAR_TIME_GUTTER = 5;
-    const float TIME_WIDTH      = 128;
-    const float TIME_HEIGHT     = 35;
+    // The -5 "compensates" for font height vs time box height difference
+    const float TIME_TOP        = (BAR_TOP + BAR_HEIGHT + BAR_TIME_GUTTER);
 
     const D3DCOLOR BAR_COLOR    = D3DCOLOR_RGBA(0x50, 0x50, 0x50, 0xFF);
 
-    bar->Begin(D3DXSPRITE_ALPHABLEND);
-
-    D3DXVECTOR3 bar_pos;
-    bar_pos.x = BAR_LEFT;
-    bar_pos.y = BAR_TOP;
-    bar_pos.z = 0;
-
-    RECT bar_rect = { 0, 0, BAR_WIDTH, BAR_HEIGHT };
     D3DCOLOR bar_grey = BAR_COLOR;
-
-#ifdef ENABLE_LOG
-    fprintf(out_file, "[DRAW] bar at (%.2f, %.2f) width: %.2f height: %.2f\n",
-        bar_pos.x, bar_pos.y, bar_rect.right, bar_rect.bottom);
-#endif /* ENABLE_LOG */
-
-    bar->Draw(texture, &bar_rect,  NULL, &bar_pos,  bar_grey);
-
-    // Draw delta bar
-    D3DCOLOR delta_bar_color;
     D3DXVECTOR3 delta_pos;
     RECT delta_size = { 0, 0, 0, BAR_HEIGHT - 2 };
 
-    delta_bar_color = BarColor(delta, delta_diff);
-    delta_pos.z = 0;
+    // Provide a default centered position in case user
+    // disabled drawing of the bar
+    delta_pos.x = SCREEN_WIDTH / 2.0;
     delta_pos.y = BAR_TOP + 1;
-    delta_pos.x = SCREEN_CENTER;
+    delta_pos.z = 0;
+    delta_size.right = 1;
 
-    // Delta is non-negative: colored bar is in the right-hand half.
-    if (delta >= 0) {
-        delta_size.right = (BAR_WIDTH / 2.0) * (delta / 2.0);
-    }
+    bar->Begin(D3DXSPRITE_ALPHABLEND);
 
-    // Delta negative, colored bar is in the left-hand half
-    else if (delta < 0) {
-        delta_pos.x = SCREEN_CENTER - ((BAR_WIDTH / 2.0) * (-delta / 2.0));
-        delta_size.right = SCREEN_CENTER - delta_pos.x;
-    }
+    if (config.bar_enabled) {
 
-    // Don't allow negative (red) bar to start before the -2.0s position
-    delta_pos.x = max(delta_pos.x, SCREEN_CENTER - (BAR_WIDTH / 2.0));
+        D3DXVECTOR3 bar_pos;
+        bar_pos.x = BAR_LEFT;
+        bar_pos.y = BAR_TOP;
+        bar_pos.z = 0;
 
-    // Max width is always half of bar width (left or right half)
-    delta_size.right = min(delta_size.right, BAR_WIDTH / 2.0);
-
-    // Min width is 1, as zero doesn't make sense to draw
-    if (delta_size.right < 1)
-        delta_size.right = 1;
+        RECT bar_rect = { 0, 0, BAR_WIDTH, BAR_HEIGHT };
 
 #ifdef ENABLE_LOG
-    fprintf(out_file, "[DRAW] colored-bar at (%.2f, %.2f) width: %.2f height: %.2f\n",
-        delta_pos.x, delta_pos.y, delta_size.right, delta_size.bottom);
+        fprintf(out_file, "[DRAW] bar at (%.2f, %.2f) width: %.2f height: %.2f\n",
+            bar_pos.x, bar_pos.y, bar_rect.right, bar_rect.bottom);
 #endif /* ENABLE_LOG */
 
-    bar->Draw(texture, &delta_size, NULL, &delta_pos, delta_bar_color);
+        bar->Draw(texture, &bar_rect,  NULL, &bar_pos,  bar_grey);
+
+        // Draw delta bar
+        D3DCOLOR delta_bar_color;
+
+        delta_bar_color = BarColor(delta, delta_diff);
+        delta_pos.x = SCREEN_CENTER;
+
+        // Delta is non-negative: colored bar is in the right-hand half.
+        if (delta >= 0) {
+            delta_size.right = (BAR_WIDTH / 2.0) * (delta / 2.0);
+        }
+
+        // Delta negative, colored bar is in the left-hand half
+        else if (delta < 0) {
+            delta_pos.x = SCREEN_CENTER - ((BAR_WIDTH / 2.0) * (-delta / 2.0));
+            delta_size.right = SCREEN_CENTER - delta_pos.x;
+        }
+
+        // Don't allow negative (red) bar to start before the -2.0s position
+        delta_pos.x = max(delta_pos.x, SCREEN_CENTER - (BAR_WIDTH / 2.0));
+
+        // Max width is always half of bar width (left or right half)
+        delta_size.right = min(delta_size.right, BAR_WIDTH / 2.0);
+
+        // Min width is 1, as zero doesn't make sense to draw
+        if (delta_size.right < 1)
+            delta_size.right = 1;
+
+#ifdef ENABLE_LOG
+        fprintf(out_file, "[DRAW] colored-bar at (%.2f, %.2f) width: %.2f height: %.2f\n",
+            delta_pos.x, delta_pos.y, delta_size.right, delta_size.bottom);
+#endif /* ENABLE_LOG */
+
+        bar->Draw(texture, &delta_size, NULL, &delta_pos, delta_bar_color);
+
+    }
 
     // Draw the time text ("-0.18")
+    if (config.time_enabled) {
 
-    D3DCOLOR shadowColor = 0xC0585858;
-    D3DCOLOR textColor = TextColor(delta);
+        D3DCOLOR shadowColor = 0xC0585858;
+        D3DCOLOR textColor = TextColor(delta);
 
-    char lp_deltaBest[15] = "";
+        char lp_deltaBest[15] = "";
 
-    float time_rect_center = delta_pos.x + (delta_size.right / 2.0);
-    float left_edge = (SCREEN_WIDTH - BAR_WIDTH) / 2.0;
-    float right_edge = (SCREEN_WIDTH + BAR_WIDTH) / 2.0;
-    if (time_rect_center < left_edge)
-        time_rect_center = left_edge;
-    else if (time_rect_center > right_edge)
-        time_rect_center = right_edge;
+        float time_rect_center = delta >= 0
+            ? (delta_pos.x + delta_size.right)
+            : delta_pos.x;
+        float left_edge = (SCREEN_WIDTH - BAR_WIDTH) / 2.0;
+        float right_edge = (SCREEN_WIDTH + BAR_WIDTH) / 2.0;
+        if (time_rect_center <= left_edge)
+            time_rect_center = left_edge + 1;
+        else if (time_rect_center >= right_edge)
+            time_rect_center = right_edge - 1;
 
-    RECT time_rect = { 0, 0, TIME_WIDTH, TIME_HEIGHT };
-    D3DXVECTOR3 time_pos;
-    time_pos.x = time_rect_center - (TIME_WIDTH / 2.0);
-    time_pos.y = BAR_TOP + BAR_HEIGHT + BAR_TIME_GUTTER;
-    time_pos.z = 0;
-    time_rect.right = TIME_WIDTH;
+        RECT time_rect = { 0, 0, TIME_WIDTH, TIME_HEIGHT };
+        D3DXVECTOR3 time_pos;
+        time_pos.x = time_rect_center - TIME_WIDTH / 2.0;
+        time_pos.y = TIME_TOP;
+        time_pos.z = 0;
+        time_rect.right = TIME_WIDTH;
 
 #ifdef ENABLE_LOG
-    fprintf(out_file, "[DRAW] delta-box at (%.2f, %.2f) width: %.2f height: %.2f\n",
-        time_pos.x, time_pos.y, time_rect.right, time_rect.bottom);
+        fprintf(out_file, "[DRAW] delta-box at (%.2f, %.2f) width: %d height: %d value: %.2f\n",
+            time_pos.x, time_pos.y, time_rect.right, time_rect.bottom, delta);
 #endif /* ENABLE_LOG */
 
-    bar->Draw(texture, &time_rect, NULL, &time_pos, bar_grey);
-    bar->End();
+        bar->Draw(texture, &time_rect, NULL, &time_pos, bar_grey);
+        bar->End();
 
-    FontPosition.left = time_pos.x;
-    FontPosition.right = FontPosition.left + TIME_WIDTH;
-    FontPosition.top = BAR_TOP + BAR_HEIGHT; // + BAR_TIME_GUTTER;
+        FontPosition.left = time_pos.x;
+        FontPosition.top = time_pos.y - 5;   // To vertically align text and box
+        FontPosition.right = FontPosition.left + TIME_WIDTH;
+        FontPosition.bottom = FontPosition.top + TIME_HEIGHT + 5;
 
-    ShadowPosition.left = FontPosition.left + 2;
-    ShadowPosition.right = FontPosition.right;
-    ShadowPosition.top = FontPosition.top + 2;
+        ShadowPosition.left = FontPosition.left + 2;
+        ShadowPosition.top = FontPosition.top + 2;
+        ShadowPosition.right = FontPosition.right;
+        ShadowPosition.bottom = FontPosition.bottom;
 
-    sprintf(lp_deltaBest, "%+2.2f", delta);
-    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &ShadowPosition, DT_CENTER, shadowColor);
-    g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition,   DT_CENTER, textColor);
+        sprintf(lp_deltaBest, "%+2.2f", delta);
+        g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &ShadowPosition, DT_CENTER, shadowColor);
+        g_Font->DrawText(NULL, (LPCSTR)lp_deltaBest, -1, &FontPosition,   DT_CENTER, textColor);
+    }
+    else {
+        bar->End();
+    }
 
 }
 
@@ -662,7 +661,7 @@ void DeltaBestPlugin::RenderScreenBeforeOverlays(const ScreenInfoV01 &info)
     and display a suitable value to get there in n ticks */
     if (render_ticks % render_ticks_int == 0) {
         prev_delta_best = current_delta_best;
-        current_delta_best = CalculateDeltaBest2();
+        current_delta_best = CalculateDeltaBest();
         diff = current_delta_best - delta;
         double abs_diff = abs(diff);
 
@@ -748,16 +747,24 @@ void DeltaBestPlugin::PostReset(const ScreenInfoV01 &info)
 
 void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_file)
 {
-    config.bar_left = GetPrivateProfileInt("Bar", "Left", 0, ini_file);
-    config.bar_top = GetPrivateProfileInt("Bar", "Top", 0, ini_file);
-    config.bar_width = GetPrivateProfileInt("Bar", "Width", 0, ini_file);
-    config.bar_height = GetPrivateProfileInt("Bar", "Height", 0, ini_file);
-    config.bar_gutter = GetPrivateProfileInt("Bar", "Gutter", 5, ini_file);
 
+    // [Bar] section
+    config.bar_left = GetPrivateProfileInt("Bar", "Left", 0, ini_file);
+    config.bar_top = GetPrivateProfileInt("Bar", "Top", DEFAULT_BAR_TOP, ini_file);
+    config.bar_width = GetPrivateProfileInt("Bar", "Width", DEFAULT_BAR_WIDTH, ini_file);
+    config.bar_height = GetPrivateProfileInt("Bar", "Height", DEFAULT_BAR_HEIGHT, ini_file);
+    config.bar_gutter = GetPrivateProfileInt("Bar", "Gutter", DEFAULT_BAR_TIME_GUTTER, ini_file);
+    config.bar_enabled = GetPrivateProfileInt("Bar", "Enabled", 1, ini_file) == 1 ? true : false;
+
+    // [Time] section
     config.time_top = GetPrivateProfileInt("Time", "Top", 0, ini_file);
-    config.time_width = GetPrivateProfileInt("Time", "Width", 0, ini_file);
-    config.time_height = GetPrivateProfileInt("Time", "Height", 0, ini_file);
+    config.time_width = GetPrivateProfileInt("Time", "Width", DEFAULT_TIME_WIDTH, ini_file);
+    config.time_height = GetPrivateProfileInt("Time", "Height", DEFAULT_TIME_HEIGHT, ini_file);
     config.time_font_size = GetPrivateProfileInt("Time", "FontSize", DEFAULT_FONT_SIZE, ini_file);
+    config.time_enabled = GetPrivateProfileInt("Time", "Enabled", 1, ini_file) == 1 ? true : false;
     GetPrivateProfileString("Time", "FontName", DEFAULT_FONT_NAME, config.time_font_name, FONT_NAME_MAXLEN, ini_file);
+
+    // [Keyboard] section
+    config.keyboard_magic = GetPrivateProfileInt("Keyboard", "MagicKey", DEFAULT_MAGIC_KEY, ini_file);
 
 }

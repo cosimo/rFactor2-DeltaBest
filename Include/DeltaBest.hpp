@@ -12,19 +12,29 @@
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define DELTA_BEST_VERSION      "v8 (Indy)"
+#define DELTA_BEST_VERSION      "v9 (Imola)"
 #define PLUGIN_NAME             "rF2 Delta Best - 2014.05.08"
-#undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
-#define LOG_FILE                "Plugins\\DeltaBest.log"
+#define ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
+#undef  LOG_FILE                "Plugins\\DeltaBest.log"
 #define CONFIG_FILE             "Plugins\\DeltaBest.ini"
 #define GREEN_FLAG              5
 #define COLOR_INTENSITY         0xF0
+
 #define DEFAULT_FONT_SIZE       48
 #define DEFAULT_FONT_NAME       "Arial Black"
 
+#define DEFAULT_BAR_WIDTH       580
+#define DEFAULT_BAR_HEIGHT      20
+#define DEFAULT_BAR_TOP         130
+#define DEFAULT_BAR_TIME_GUTTER 5
+
+#define DEFAULT_TIME_WIDTH      128
+#define DEFAULT_TIME_HEIGHT     35
+
+
 /* Toggle plugin with CTRL + a magic key. Reference:
 http://msdn.microsoft.com/en-us/library/windows/desktop/dd375731%28v=vs.85%29.aspx */
-#define MAGIC_KEY               (0x44)      /* "D" */
+#define DEFAULT_MAGIC_KEY       (0x44)      /* "D" */
 #define KEY_DOWN(k)             ((GetAsyncKeyState(k) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000))
 
 // This is used for the app to use the plugin for its intended purpose
@@ -106,7 +116,6 @@ public:
 private:
 
     double CalculateDeltaBest();
-    double CalculateDeltaBest2();
     void DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff);
     void LoadConfig(struct PluginConfig &config, const char *ini_file);
     bool NeedToDisplay();
@@ -114,9 +123,6 @@ private:
     void WriteLog(const char * const msg);
     D3DCOLOR TextColor(double delta);
     D3DCOLOR BarColor(double delta, double delta_diff);
-    D3DCOLOR TextColorDifferential(unsigned int t1, unsigned int t2);
-    D3DCOLOR TextColorDifferential2();
-    //D3DCOLOR TextColorDifferential3();
 
     //
     // Current status

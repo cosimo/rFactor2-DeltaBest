@@ -1,10 +1,10 @@
-rFactor2 Delta Best plugin (v8 "Indy")
-======================================
+rFactor2 Delta Best plugin (v9 "Imola")
+=======================================
 
 Author:      Cosimo <cosimo@streppone.it>
 Last update: 2014/05/08
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
-Status:      Working, possibly with bugs. Not that many anymore.
+Status:      Works!
 
 == What is this? ==
 
@@ -24,10 +24,25 @@ Screenshot or it didn't happen:
 
 Even video:
 
-  http://www.youtube.com/watch?v=85DRsOtdtaY
+  http://www.youtube.com/watch?v=FKzknrxRU8s
 
 The idea is that you are shown in realtime the difference (split)
 between the current lap and your best lap of the current session.
+
+== Installation ==
+
+Copy the content of the zip file into your rFactor 2
+plugins folder, most likely something like this:
+
+  "C:\Program files (x86)\rFactor2\Plugins"
+
+You can omit this README.txt.
+
+For the INI file to be used, copy the provided example
+called "DeltaBest.example.ini" into "DeltaBest.ini"
+and modify at will.
+
+If you don't rename it, it won't be used.
 
 == Status ==
 
@@ -42,21 +57,25 @@ and get to learn a track.
 
 == Customizing plugin position and appearance ==
 
-----------------------------------------------------------------------
-NOTE: version 8 temporarily *ignores* the .ini file, even if present.
-This is due to the complete rework done to implement the dynamic
-colored bar. At some point, I will add back customization via
-the ini file. For now I feel it's not that important.
-----------------------------------------------------------------------
+Version 9 is completely configurable via an ini file.
 
 You can customise how the time appears on screen by creating
-an INI file. The INI file must be called "DeltaBest.ini"
+this INI file. The INI file must be called "DeltaBest.ini"
 and must be placed in the same Plugins folder as the "DeltaBest.dll"
 file itself.
 
 An example of INI file that you can change at will is bundled
 in this zip file as "DeltaBest.example.ini". If you want to customise
 the plugin, copy that file in "DeltaBest.ini" and change at will.
+
+Examples of things you can do:
+
+- customize the font face and size of the delta time text
+- switch off the dynamic colored bar and leave just the time text
+- switch off the delta time and leave just the bar
+- modify the default shortcut key to toggle the display of
+  the plugin (default is <CTRL> + d)
+- modify position, width and height of either the bar or the text
 
 == For feedback ==
 
