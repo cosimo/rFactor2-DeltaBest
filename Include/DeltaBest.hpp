@@ -12,8 +12,8 @@
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define DELTA_BEST_VERSION      "v8-dev"
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.05.04"
+#define DELTA_BEST_VERSION      "v8 (Indy)"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.05.08"
 #undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
 #define LOG_FILE                "Plugins\\DeltaBest.log"
 #define CONFIG_FILE             "Plugins\\DeltaBest.ini"

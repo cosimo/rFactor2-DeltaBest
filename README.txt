@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin (v8-DEV)
-===================================
+rFactor2 Delta Best plugin (v8 "Indy")
+======================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/05/06
+Last update: 2014/05/08
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Working, possibly with bugs. Not that many anymore.
 
@@ -41,6 +41,13 @@ That is quite an effective way to improve your lap times,
 and get to learn a track.
 
 == Customizing plugin position and appearance ==
+
+----------------------------------------------------------------------
+NOTE: version 8 temporarily *ignores* the .ini file, even if present.
+This is due to the complete rework done to implement the dynamic
+colored bar. At some point, I will add back customization via
+the ini file. For now I feel it's not that important.
+----------------------------------------------------------------------
 
 You can customise how the time appears on screen by creating
 an INI file. The INI file must be called "DeltaBest.ini"
