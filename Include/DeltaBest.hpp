@@ -1,6 +1,11 @@
-//
-// rF2 Delta Best plugin
-//
+/*
+rF2 Delta Best Plugin
+
+Author: Cosimo Streppone <cosimo@streppone.it>
+Date:   April/May 2014
+URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
+
+*/
 
 #ifndef _INTERNALS_EXAMPLE_H
 #define _INTERNALS_EXAMPLE_H
@@ -12,10 +17,10 @@
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define DELTA_BEST_VERSION      "v9 (Imola)"
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.05.08"
-#define ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
-#undef  LOG_FILE                "Plugins\\DeltaBest.log"
+#define DELTA_BEST_VERSION      "v11/Adria"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.06.28"
+#undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
+#define LOG_FILE                "Plugins\\DeltaBest.log"
 #define CONFIG_FILE             "Plugins\\DeltaBest.ini"
 #define GREEN_FLAG              5
 #define COLOR_INTENSITY         0xF0

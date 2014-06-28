@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin (v9 "Imola")
-=======================================
+rFactor2 Delta Best plugin (v11 "Adria")
+========================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/05/08
+Last update: 2014/06/28
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Works!
 
@@ -31,8 +31,9 @@ between the current lap and your best lap of the current session.
 
 == Installation ==
 
-Copy the content of the zip file into your rFactor 2
-plugins folder, most likely something like this:
+Copy the content of the zip file (all files, maybe except
+the README.txt) into your rFactor 2 plugins folder,
+most likely a directory like this:
 
   "C:\Program files (x86)\rFactor2\Plugins"
 
@@ -43,6 +44,22 @@ called "DeltaBest.example.ini" into "DeltaBest.ini"
 and modify at will.
 
 If you don't rename it, it won't be used.
+
+== Note for 64-bit builds ==
+
+If you are using a 64-bit build of rFactor2, you should
+use the corresponding plugin file (DeltaBest_x64.dll)
+instead of the default one (DeltaBest.dll).
+
+As of this writing (28/6/2014) a stable 64-bit build of
+rFactor2 hasn't been released yet, so I don't know whether
+rFactor2 will automatically select the 64-bit plugin or not,
+so I would recommend you *DO NOT* install both dll files
+together. Just pick the one that corresponds to your
+rFactor2 build:
+
+* 32-bit, use "DeltaBest.dll"
+* 64-bit, use "DeltaBest_x64.dll"
 
 == Status ==
 
@@ -57,7 +74,7 @@ and get to learn a track.
 
 == Customizing plugin position and appearance ==
 
-Version 9 is completely configurable via an ini file.
+From version 9 the plugin is completely configurable via an ini file.
 
 You can customise how the time appears on screen by creating
 this INI file. The INI file must be called "DeltaBest.ini"
