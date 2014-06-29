@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin (v11 "Adria")
-========================================
+rFactor2 Delta Best plugin (v12 "Mugello")
+==========================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/06/28
+Last update: 2014/06/29
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Works!
 
