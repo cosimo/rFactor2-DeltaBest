@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin (v12 "Mugello")
+rFactor2 Delta Best plugin (v13 "Pergusa")
 ==========================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/06/29
+Last update: 2014/06/30
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Works!
 
@@ -51,12 +51,15 @@ If you are using a 64-bit build of rFactor2, you should
 use the corresponding plugin file (DeltaBest_x64.dll)
 instead of the default one (DeltaBest.dll).
 
-As of this writing (28/6/2014) a stable 64-bit build of
+As of this writing (30/6/2014) a stable 64-bit build of
 rFactor2 hasn't been released yet, so I don't know whether
-rFactor2 will automatically select the 64-bit plugin or not,
-so I would recommend you *DO NOT* install both dll files
-together. Just pick the one that corresponds to your
-rFactor2 build:
+rFactor2 will automatically select the 64-bit plugin or not.
+
+It seems that installing both 32 and 64 bit versions together
+won't do any harm, but I would recommend if you can to install
+just the single DLL file you need.
+
+Pick the one that corresponds to your rFactor2 build:
 
 * 32-bit, use "DeltaBest.dll"
 * 64-bit, use "DeltaBest_x64.dll"

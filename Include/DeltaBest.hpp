@@ -18,12 +18,12 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <cmath>
 
 #if _WIN64
-  #define DELTA_BEST_VERSION      "v12/Mugello (64-bit)"
+  #define DELTA_BEST_VERSION      "v13/Pergusa (64-bit)"
 #else
-  #define DELTA_BEST_VERSION    "v12/Mugello"
+  #define DELTA_BEST_VERSION    "v13/Pergusa"
 #endif /* _WIN64 */
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.06.29"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.06.30"
 #undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
 #define LOG_FILE                "Plugins\\DeltaBest.log"
 #define CONFIG_FILE             "Plugins\\DeltaBest.ini"
@@ -138,8 +138,8 @@ private:
     // Current status
     //
 
-    float mET;                             /* needed for the hardware example */
-    bool mEnabled;                         /* needed for the hardware example */
+    float mET;                          /* needed for the hardware example */
+    bool mEnabled;                      /* needed for the hardware example */
 
 };
 

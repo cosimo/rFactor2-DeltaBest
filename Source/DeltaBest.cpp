@@ -74,7 +74,7 @@ struct PluginConfig {
 } config;
 
 #ifdef ENABLE_LOG
-FILE* out_file;
+FILE* out_file = NULL;
 #endif
 
 // DirectX 9 objects, to render some text on screen
@@ -123,6 +123,8 @@ void DeltaBestPlugin::StartSession()
 
 void DeltaBestPlugin::EndSession()
 {
+	mET = 0.0f;
+	in_realtime = false;
 #ifdef ENABLE_LOG
 	WriteLog("--ENDSESSION--");
 	if (out_file)
@@ -360,6 +362,12 @@ void DeltaBestPlugin::UpdateTelemetry(const TelemInfoV01 &info)
 
 	double dt = info.mDeltaTime;
 	double forward_speed = - info.mLocalVel.z;
+
+	/* Ignore movement in reverse gear
+	   Causes crashes down the line but don't know why :-| */
+	if (forward_speed <= 0)
+		return;
+
 	double distance = forward_speed * dt;
 
 	inbtw_scoring_traveled += distance;
