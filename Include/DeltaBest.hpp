@@ -17,16 +17,21 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#if _WIN64
-  #define DELTA_BEST_VERSION      "v13/Pergusa (64-bit)"
-#else
-  #define DELTA_BEST_VERSION    "v13/Pergusa"
-#endif /* _WIN64 */
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.08.21"
+#define DELTA_BEST_VERSION      "v15/Modena"
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.06.30"
-#undef  ENABLE_LOG              /* To enable file logging (Plugins/DeltaBest.log) */
-#define LOG_FILE                "Plugins\\DeltaBest.log"
-#define CONFIG_FILE             "Plugins\\DeltaBest.ini"
+#undef  ENABLE_LOG              /* To enable file logging */
+
+#if _WIN64
+  #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
+  #define CONFIG_FILE           "Bin64\\Plugins\\DeltaBest.ini"
+  #define TEXTURE_BACKGROUND    "Bin64\\Plugins\\DeltaBestBackground.png"
+#else
+  #define LOG_FILE              "Bin32\\Plugins\\DeltaBest.log"
+  #define CONFIG_FILE           "Bin32\\Plugins\\DeltaBest.ini"
+  #define TEXTURE_BACKGROUND    "Bin32\\Plugins\\DeltaBestBackground.png"
+#endif
+
 #define GREEN_FLAG              5
 #define COLOR_INTENSITY         0xF0
 
@@ -40,6 +45,11 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #define DEFAULT_TIME_WIDTH      128
 #define DEFAULT_TIME_HEIGHT     35
+
+/* Whether to use UpdateTelemetry() to achieve a better precision and
+   faster updates to the delta time instead of every 0.2s that
+   UpdateScoring() allows */
+#define DEFAULT_HIRES_UPDATES   1
 
 
 /* Toggle plugin with CTRL + a magic key. Reference:
@@ -67,6 +77,9 @@ public:
 
     void StartSession();           // session has started
     void EndSession();             // session has ended
+
+	void Load();                   // when a new track/car is loaded
+	void Unload();                 // back to the selection screen
 
     // GAME OUTPUT
     long WantsTelemetryUpdates() { return 1; }             /* 1 = Player only */
@@ -129,7 +142,7 @@ private:
     void DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff);
     void LoadConfig(struct PluginConfig &config, const char *ini_file);
     bool NeedToDisplay();
-    void ResetLap(struct LapTime lap);
+    void ResetLap(struct LapTime *lap);
     void WriteLog(const char * const msg);
     D3DCOLOR TextColor(double delta);
     D3DCOLOR BarColor(double delta, double delta_diff);

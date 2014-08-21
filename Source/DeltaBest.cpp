@@ -64,6 +64,7 @@ struct PluginConfig {
 	unsigned int bar_gutter;
 
 	bool time_enabled;
+	bool hires_updates;
 	unsigned int time_top;
 	unsigned int time_width;
 	unsigned int time_height;
@@ -95,7 +96,7 @@ void DeltaBestPlugin::WriteLog(const char * const msg)
 {
 #ifdef ENABLE_LOG
 	if (out_file == NULL)
-		out_file = fopen(LOG_FILE, "w");
+		out_file = fopen(LOG_FILE, "a");
 
 	if (out_file != NULL)
 		fprintf(out_file, "%s\n", msg);
@@ -114,11 +115,10 @@ void DeltaBestPlugin::Startup(long version)
 void DeltaBestPlugin::StartSession()
 {
 #ifdef ENABLE_LOG
-	out_file = fopen(LOG_FILE, "w");
 	WriteLog("--STARTSESSION--");
 #endif /* ENABLE_LOG */
-	ResetLap(last_lap);
-	ResetLap(best_lap);
+	ResetLap(&last_lap);
+	ResetLap(&best_lap);
 }
 
 void DeltaBestPlugin::EndSession()
@@ -127,11 +127,25 @@ void DeltaBestPlugin::EndSession()
 	in_realtime = false;
 #ifdef ENABLE_LOG
 	WriteLog("--ENDSESSION--");
-	if (out_file)
+	if (out_file) {
 		fclose(out_file);
+		out_file = NULL;
+	}
 #endif /* ENABLE_LOG */
-	ResetLap(last_lap);
-	ResetLap(best_lap);
+}
+
+void DeltaBestPlugin::Load()
+{
+#ifdef ENABLE_LOG
+	WriteLog("--LOAD--");
+#endif /* ENABLE_LOG */
+}
+
+void DeltaBestPlugin::Unload()
+{
+#ifdef ENABLE_LOG
+	WriteLog("--UNLOAD--");
+#endif /* ENABLE_LOG */
 }
 
 void DeltaBestPlugin::EnterRealtime()
@@ -148,18 +162,9 @@ void DeltaBestPlugin::ExitRealtime()
 {
 	in_realtime = false;
 
-	/* Reset last and best lap, so we'll start from scratch next time.
-
-	TODO: keep best lap. Player could use changing setups a few times
-	and challenging the same best lap in the same session
-	*/
-	ResetLap(last_lap);
-	ResetLap(best_lap);
-
 	/* Reset delta best state */
 	last_pos = 0;
 	prev_lap_dist = 0;
-	//prev_current_et = 0;
 	current_delta_best = 0;
 	prev_delta_best = 0;
 
@@ -168,15 +173,21 @@ void DeltaBestPlugin::ExitRealtime()
 #endif /* ENABLE_LOG */
 }
 
-void DeltaBestPlugin::ResetLap(struct LapTime lap)
+void DeltaBestPlugin::ResetLap(struct LapTime *lap)
 {
-	lap.ended = NULL;
-	lap.final = NULL;
-	lap.started = NULL;
-	lap.interval_offset = 0;
+	if (lap == NULL)
+		return;
 
-	for (unsigned int i = 0; i < sizeof(lap.elapsed); i++)
-		lap.elapsed[i] = 0;
+	lap->ended = 0;
+	lap->final = 0;
+	lap->started = 0;
+	lap->interval_offset = 0;
+
+	/* Something's wrong here */
+	/*
+	for (unsigned int i = 0; i < sizeof(lap->elapsed); i++)
+		lap->elapsed[i] = 0;
+	*/
 }
 
 bool DeltaBestPlugin::NeedToDisplay()
@@ -353,11 +364,18 @@ the distance traveled at 20hz instead of 5hz of UpdateScoring().
 
 We use this data to complete information on vehicle lap progress
 between successive UpdateScoring() calls.
+
+This behaviour can be disabled by the "HiresUpdates=0" option
+in the ini file.
+
 */
 
 void DeltaBestPlugin::UpdateTelemetry(const TelemInfoV01 &info)
 {
 	if (! in_realtime)
+		return;
+
+	if (! config.hires_updates)
 		return;
 
 	double dt = info.mDeltaTime;
@@ -415,7 +433,7 @@ void DeltaBestPlugin::InitScreen(const ScreenInfoV01& info)
 	D3DXCreateFontIndirect((LPDIRECT3DDEVICE9) info.mDevice, &FontDesc, &g_Font);
 	assert(g_Font != NULL);
 
-	D3DXCreateTextureFromFile((LPDIRECT3DDEVICE9) info.mDevice, "Plugins\\DeltaBestBackground.png", &texture);
+	D3DXCreateTextureFromFile((LPDIRECT3DDEVICE9) info.mDevice, TEXTURE_BACKGROUND, &texture);
 	D3DXCreateSprite((LPDIRECT3DDEVICE9) info.mDevice, &bar);
 
 	assert(texture != NULL);
@@ -682,18 +700,21 @@ void DeltaBestPlugin::RenderScreenBeforeOverlays(const ScreenInfoV01 &info)
 			delta = current_delta_best;
 		}
 		else {
-			render_ticks_int = 16;
-			if (abs_diff > 0.25)
-				render_ticks_int = 1;
-			else if (abs_diff > 0.1)
-				render_ticks_int = 8;
-			delta += diff < 0 ? -0.01 : 0.01;
+			if (config.hires_updates) {
+				render_ticks_int = 16;
+				if (abs_diff > 0.25)
+					render_ticks_int = 1;
+				else if (abs_diff > 0.1)
+					render_ticks_int = 8;
+			}
+			if (abs_diff > 0.01) {
+				delta += diff < 0 ? -0.01 : 0.01;
+			}
 			current_delta_best = delta;
 		}
 	}
 
 	render_ticks++;
-
 	DrawDeltaBar(info, delta, diff);
 }
 
@@ -775,6 +796,7 @@ void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_fi
 	config.time_height = GetPrivateProfileInt("Time", "Height", DEFAULT_TIME_HEIGHT, ini_file);
 	config.time_font_size = GetPrivateProfileInt("Time", "FontSize", DEFAULT_FONT_SIZE, ini_file);
 	config.time_enabled = GetPrivateProfileInt("Time", "Enabled", 1, ini_file) == 1 ? true : false;
+	config.hires_updates = GetPrivateProfileInt("Time", "HiresUpdates", DEFAULT_HIRES_UPDATES, ini_file) == 1 ? true : false;
 	GetPrivateProfileString("Time", "FontName", DEFAULT_FONT_NAME, config.time_font_name, FONT_NAME_MAXLEN, ini_file);
 
 	// [Keyboard] section
