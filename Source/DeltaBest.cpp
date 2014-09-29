@@ -580,18 +580,18 @@ void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, doub
 		delta_bar_color = BarColor(delta, delta_diff);
 		delta_pos.x = SCREEN_CENTER;
 
-		// Delta is non-negative: colored bar is in the right-hand half.
-		if (delta >= 0) {
-			delta_size.right = (BAR_WIDTH / 2.0) * (delta / 2.0);
+		// Delta is negative: colored bar is in the right-hand half.
+		if (delta < 0) {
+			delta_size.right = (BAR_WIDTH / 2.0) * (-delta / 2.0);
 		}
 
-		// Delta negative, colored bar is in the left-hand half
-		else if (delta < 0) {
-			delta_pos.x = SCREEN_CENTER - ((BAR_WIDTH / 2.0) * (-delta / 2.0));
+		// Delta non-negative, colored bar is in the left-hand half
+		else if (delta > 0) {
+			delta_pos.x = SCREEN_CENTER - ((BAR_WIDTH / 2.0) * (delta / 2.0));
 			delta_size.right = SCREEN_CENTER - delta_pos.x;
 		}
 
-		// Don't allow negative (red) bar to start before the -2.0s position
+		// Don't allow positive (green) bar to start before the -2.0s position
 		delta_pos.x = max(delta_pos.x, SCREEN_CENTER - (BAR_WIDTH / 2.0));
 
 		// Max width is always half of bar width (left or right half)

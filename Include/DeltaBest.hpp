@@ -17,8 +17,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.08.21"
-#define DELTA_BEST_VERSION      "v15/Modena"
+#define PLUGIN_NAME             "rF2 Delta Best - 2014.09.29"
+#define DELTA_BEST_VERSION      "v16/Sebring"
 
 #undef  ENABLE_LOG              /* To enable file logging */
 

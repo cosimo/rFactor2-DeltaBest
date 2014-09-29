@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin (v15 "Modena")
-=========================================
+rFactor2 Delta Best plugin (v16 "Sebring")
+==========================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/08/21
+Last update: 2014/09/29
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Works!
 
