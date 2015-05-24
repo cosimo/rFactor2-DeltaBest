@@ -17,10 +17,10 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2014.09.29"
-#define DELTA_BEST_VERSION      "v16/Sebring"
+#define PLUGIN_NAME             "rF2 Delta Best - 2015.05.24"
+#define DELTA_BEST_VERSION      "v17/Indy"
 
-#undef  ENABLE_LOG              /* To enable file logging */
+#define ENABLE_LOG              /* To enable file logging */
 
 #if _WIN64
   #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
@@ -31,6 +31,9 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
   #define CONFIG_FILE           "Bin32\\Plugins\\DeltaBest.ini"
   #define TEXTURE_BACKGROUND    "Bin32\\Plugins\\DeltaBestBackground.png"
 #endif
+
+#define DATA_PATH_FILE			"Core\\data.path"
+#define BEST_LAP_FILE			"%s\\Userdata\\player\\Settings\\%s\\DeltaBest_%s.lap"
 
 #define GREEN_FLAG              5
 #define COLOR_INTENSITY         0xF0
@@ -141,6 +144,10 @@ private:
     double CalculateDeltaBest();
     void DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff);
     void LoadConfig(struct PluginConfig &config, const char *ini_file);
+	const char * GetRF2DataPath();
+	const char * GetBestLapFileName(const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh);
+	void LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh);
+	bool SaveBestLap(const struct LapTime *lap, const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh);
     bool NeedToDisplay();
     void ResetLap(struct LapTime *lap);
     void WriteLog(const char * const msg);

@@ -31,6 +31,7 @@ bool in_realtime = false;              /* Are we in cockpit? As opposed to monit
 bool green_flag = false;               /* Is the race in green flag condition? */
 bool key_switch = true;                /* Enabled/disabled state by keyboard action */
 bool displayed_welcome = false;        /* Whether we displayed the "plugin enabled" welcome message */
+bool loaded_best_in_session = false;   /* Did we already load the best lap in this session? */
 unsigned int prev_pos = 0;             /* Meters around the track of the current lap (previous interval) */
 unsigned int last_pos = 0;             /* Meters around the track of the current lap */
 unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
@@ -42,6 +43,8 @@ double inbtw_scoring_traveled = 0;     /* Distance traveled (m) between successi
 double inbtw_scoring_elapsed = 0;
 long render_ticks = 0;
 long render_ticks_int = 12;
+char datapath[FILENAME_MAX] = "";
+char bestlap_filename[FILENAME_MAX] = "";
 
 /* Keeps information about last and best laps */
 struct LapTime {
@@ -117,6 +120,7 @@ void DeltaBestPlugin::StartSession()
 #ifdef ENABLE_LOG
 	WriteLog("--STARTSESSION--");
 #endif /* ENABLE_LOG */
+	loaded_best_in_session = false;
 	ResetLap(&last_lap);
 	ResetLap(&best_lap);
 }
@@ -233,6 +237,14 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 		if (! vinfo.mIsPlayer)
 			continue;
 
+		if (! loaded_best_in_session) {
+#ifdef ENABLE_LOG
+			fprintf(out_file, "Trying to load best lap for this session");
+#endif
+			LoadBestLap(&best_lap, info, vinfo);
+			loaded_best_in_session = true;
+		}
+
 #ifdef ENABLE_LOG
 		fprintf(out_file, "mLapStartET=%.3f mCurrentET=%.3f Elapsed=%.3f mLapDist=%.3f/%.3f prevLapDist=%.3f prevCurrentET=%.3f deltaBest=%+2.2f lastPos=%d prevPos=%d\n",
 			vinfo.mLapStartET,
@@ -281,6 +293,9 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 					}
 
 					best_lap = last_lap;
+
+					SaveBestLap(&best_lap, info, vinfo);
+
 				}
 
 #ifdef ENABLE_LOG
@@ -802,4 +817,109 @@ void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_fi
 	// [Keyboard] section
 	config.keyboard_magic = GetPrivateProfileInt("Keyboard", "MagicKey", DEFAULT_MAGIC_KEY, ini_file);
 
+}
+
+void DeltaBestPlugin::LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh)
+{
+#ifdef ENABLE_LOG
+	fprintf(out_file, "[LOAD] Loading best lap\n");
+#endif /* ENABLE_LOG */
+
+	/* Get file name for the best lap */
+	const char *szBestLapFile = GetBestLapFileName(scoring, veh);
+	if (szBestLapFile == NULL) {
+		return;
+	}
+
+	FILE* fBestLap = fopen(szBestLapFile, "r");
+	if (fBestLap) {
+		double final_time = 0.0;
+		unsigned int i = 0, max = 50000;
+		while (! feof(fBestLap)) {
+			unsigned int meters;
+			double elapsed;
+			fscanf(fBestLap, "%u=%lf\n", &meters, &elapsed);
+			if (meters && (meters >= 0) && (meters < max)) {
+				lap->elapsed[meters] = elapsed;
+				if (elapsed > 0.0) {
+					final_time = elapsed;
+				}
+			}
+			if (meters && meters >= max) {
+				break;
+			}
+#ifdef ENABLE_LOG
+			fprintf(out_file, "[LOAD] read value from file %d: %f", meters, elapsed);
+#endif /* ENABLE_LOG */
+		}
+
+		/* Pretend best lap was achieved at the start of this session */
+		lap->started = scoring.mCurrentET;
+		lap->ended = scoring.mCurrentET;
+		lap->interval_offset = scoring.mCurrentET;
+		lap->final = final_time;
+
+		fclose(fBestLap);
+
+#ifdef ENABLE_LOG
+		fprintf(out_file, "[LOAD] Load from file completed\n");
+#endif /* ENABLE_LOG */
+	}
+
+	else {
+#ifdef ENABLE_LOG
+		fprintf(out_file, "[LOAD] No file to load or couldn't load from '%s'\n", szBestLapFile);
+#endif /* ENABLE_LOG */
+	}
+}
+
+bool DeltaBestPlugin::SaveBestLap(const struct LapTime *lap, const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh)
+{
+
+#ifdef ENABLE_LOG
+	fprintf(out_file, "[SAVE] Saving best lap\n");
+#endif /* ENABLE_LOG */
+
+	/* Get file name for the best lap */
+	const char *szBestLapFile = GetBestLapFileName(scoring, veh);
+	if (szBestLapFile == NULL) {
+		return false;
+	}
+
+	FILE* fBestLap = fopen(szBestLapFile, "w");
+	if (fBestLap) {
+		//fprintf(fBestLap, "[Elapsed]\n");
+		for (unsigned int i = 0; i < (sizeof(lap->elapsed) / sizeof(lap->elapsed[0])); i++) {
+			fprintf(fBestLap, "%d=%f\n", i, lap->elapsed[i]);
+		}
+		fclose(fBestLap);
+#ifdef ENABLE_LOG
+		fprintf(out_file, "[SAVE] Write to file completed\n");
+#endif /* ENABLE_LOG */
+		return true;
+	}
+
+	else {
+#ifdef ENABLE_LOG
+		fprintf(out_file, "[SAVE] Couldn't save to file '%s'\n", szBestLapFile);
+#endif /* ENABLE_LOG */
+		return false;
+	}
+
+}
+
+const char * DeltaBestPlugin::GetBestLapFileName(const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh)
+{
+	sprintf(bestlap_filename, BEST_LAP_FILE, GetRF2DataPath(), scoring.mTrackName, veh.mVehicleClass);
+	return bestlap_filename;
+}
+
+const char * DeltaBestPlugin::GetRF2DataPath()
+{
+	FILE* datapath_file = fopen(DATA_PATH_FILE, "r");
+	if (datapath_file != NULL) {
+		fscanf(datapath_file, "%s", &datapath);
+		fclose(datapath_file);
+	}
+	return datapath;
 }
