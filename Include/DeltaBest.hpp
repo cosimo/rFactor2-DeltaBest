@@ -17,10 +17,10 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2015.05.24"
-#define DELTA_BEST_VERSION      "v17/Indy"
+#define PLUGIN_NAME             "rF2 Delta Best - 2015.10.06"
+#define DELTA_BEST_VERSION      "v19/Nords"
 
-#define ENABLE_LOG              /* To enable file logging */
+#undef  ENABLE_LOG              /* To enable file logging */
 
 #if _WIN64
   #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
@@ -32,10 +32,18 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
   #define TEXTURE_BACKGROUND    "Bin32\\Plugins\\DeltaBestBackground.png"
 #endif
 
-#define DATA_PATH_FILE			"Core\\data.path"
-#define BEST_LAP_FILE			"%s\\Userdata\\player\\Settings\\%s\\DeltaBest_%s.lap"
+/* Maximum length of a track in meters */
+#define MAX_TRACK_LENGTH		100000
 
-#define GREEN_FLAG              5
+#define DATA_PATH_FILE			"Core\\data.path"
+#define BEST_LAP_DIR			"%s\\Userdata\\player\\Settings\\DeltaBest"
+#define BEST_LAP_FILE			"%s\\%s_%s.lap"
+
+/* Game phases -> info.mGamePhase */
+#define GP_GREEN_FLAG           5
+#define GP_YELLOW_FLAG		    6
+#define GP_SESSION_OVER			8
+
 #define COLOR_INTENSITY         0xF0
 
 #define DEFAULT_FONT_SIZE       48
@@ -58,7 +66,10 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 /* Toggle plugin with CTRL + a magic key. Reference:
 http://msdn.microsoft.com/en-us/library/windows/desktop/dd375731%28v=vs.85%29.aspx */
 #define DEFAULT_MAGIC_KEY       (0x44)      /* "D" */
+#define DEFAULT_RESET_KEY		(0x5A)      /* "Z" */
 #define KEY_DOWN(k)             ((GetAsyncKeyState(k) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000))
+
+#define FONT_NAME_MAXLEN 32
 
 // This is used for the app to use the plugin for its intended purpose
 class DeltaBestPlugin : public InternalsPluginV06
@@ -102,7 +113,7 @@ public:
     // See if the plugin wants to take over a hardware control.  If the plugin takes over the
     // control, this method returns true and sets the value of the float pointed to by the
     // second arg.  Otherwise, it returns false and leaves the float unmodified.
-    bool CheckHWControl(const char * const controlName, float &fRetVal) { return false;	}
+    bool CheckHWControl(const char * const controlName, float &fRetVal);
     bool ForceFeedback(float &forceValue) { return false; }
 
     // SCORING OUTPUT
@@ -163,6 +174,6 @@ private:
 
 };
 
-inline int round(float x) { return (floor(x + 0.5)); }
+inline int round(float x) { return int(floor(x + 0.5)); }
 
 #endif // _INTERNALS_EXAMPLE_H

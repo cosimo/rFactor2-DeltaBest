@@ -1,8 +1,8 @@
-rFactor2 Delta Best plugin (v16 "Sebring")
+rFactor2 Delta Best plugin (v19 "Nords")
 ==========================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2014/09/29
+Last update: 2015/10/23
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Works!
 
@@ -29,20 +29,40 @@ Even video:
 The idea is that you are shown in realtime the difference (split)
 between the current lap and your best lap of the current session.
 
+== Changelog ==
+
+2015/10/23 - v19/Nords
+
+    Plugin will now work after a race restart.
+    Possibly also when doing driver swaps, but I haven't been able to
+    fully test that case yet.
+
+2015/08/19 - v18/Targa
+2015/08/02 - v17/Indy (never released publicly)
+
+    Best laps now persist to disk, so when you start a new
+    session but you already had a best lap, this is automatically restored
+    from disk, and you can get the delta best timing straight away from
+    the first lap.
+
+    The Delta Best lap files will be saved in the rFactor2 user folder
+    into the "rFactor2\Userdata\player\Settings\DeltaBest" path.
+    If that path doesn't exist, it will be created.
+
 == Installation ==
 
 Copy the content of the zip file (all files, maybe except
-the README.txt) into your rFactor 2 plugins folder,
+the README.txt) into your rFactor2 plugins folder,
 most likely a directory like this:
-
-  "C:\Program files (x86)\rFactor2\Plugins"
-
-or:
 
   "C:\Program files (x86)\rFactor2\Bin32\Plugins"
   "C:\Program files (x86)\rFactor2\Bin64\Plugins"
 
-if your build of rFactor 2 is version >= 798.
+or:
+
+  "C:\Program files (x86)\rFactor2\Plugins"
+
+if your build of rFactor 2 is version < 798.
 
 You can omit this README.txt.
 
@@ -52,11 +72,11 @@ and modify at will.
 
 If you don't rename it, it won't be used.
 
-== Note for 64-bit builds ==
+== Note for 32-bit builds ==
 
-If you are using a 64-bit build of rFactor2, you should
-use the corresponding plugin file (DeltaBest_x64.dll)
-instead of the default one (DeltaBest.dll).
+If you are still using a 32-bit build of rFactor2, you should
+use the corresponding plugin file (DeltaBest.dll)
+instead of the default one (DeltaBest_x64.dll).
 
 Pick the one that corresponds to your rFactor2 build:
 
@@ -66,10 +86,11 @@ Pick the one that corresponds to your rFactor2 build:
 == Status ==
 
 Currently it works. It is quite accurate, but sometimes the
-delta time reading goes off for an instant. That has to be fixed.
+delta time reading goes off for an instant.
 There's also a dynamic colored bar that shows exactly where
 you are losing (red) or gaining time (green), regardless of your
-actual difference to best lap.
+actual difference to best lap. Both the bar and the time can
+be disabled via the ini file.
 
 That is quite an effective way to improve your lap times,
 and get to learn a track.

@@ -44,18 +44,17 @@ double inbtw_scoring_elapsed = 0;
 long render_ticks = 0;
 long render_ticks_int = 12;
 char datapath[FILENAME_MAX] = "";
+char bestlap_dir[FILENAME_MAX] = "";
 char bestlap_filename[FILENAME_MAX] = "";
 
 /* Keeps information about last and best laps */
 struct LapTime {
-	double elapsed[50000];             /* Longest possible track is 50km */
+	double elapsed[MAX_TRACK_LENGTH];
 	double final;
 	double started;
 	double ended;
 	double interval_offset;
 } best_lap, last_lap;
-
-#define FONT_NAME_MAXLEN 32
 
 struct PluginConfig {
 
@@ -75,6 +74,7 @@ struct PluginConfig {
 	char time_font_name[FONT_NAME_MAXLEN];
 
 	unsigned int keyboard_magic;
+	unsigned int keyboard_reset;
 } config;
 
 #ifdef ENABLE_LOG
@@ -121,6 +121,7 @@ void DeltaBestPlugin::StartSession()
 	WriteLog("--STARTSESSION--");
 #endif /* ENABLE_LOG */
 	loaded_best_in_session = false;
+	in_realtime = true;
 	ResetLap(&last_lap);
 	ResetLap(&best_lap);
 }
@@ -187,11 +188,10 @@ void DeltaBestPlugin::ResetLap(struct LapTime *lap)
 	lap->started = 0;
 	lap->interval_offset = 0;
 
-	/* Something's wrong here */
-	/*
-	for (unsigned int i = 0; i < sizeof(lap->elapsed); i++)
+	unsigned int i = 0, n = sizeof(lap->elapsed) / sizeof(lap->elapsed[0]);
+	for (i = 0; i < n; i++)
 		lap->elapsed[i] = 0;
-	*/
+
 }
 
 bool DeltaBestPlugin::NeedToDisplay()
@@ -229,12 +229,23 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 	if (KEY_DOWN(config.keyboard_magic))
 		key_switch = ! key_switch;
 
+	/* Reset the best lap time to none for the session */
+	else if (KEY_DOWN(config.keyboard_reset)) {
+		ResetLap(&best_lap);
+	}
+
 	/* Update plugin context information, used by NeedToDisplay() */
-	green_flag = info.mGamePhase == GREEN_FLAG;
+	green_flag = ((info.mGamePhase == GP_GREEN_FLAG)
+		       || (info.mGamePhase == GP_YELLOW_FLAG)
+		       || (info.mGamePhase == GP_SESSION_OVER));
 
 	for (long i = 0; i < info.mNumVehicles; ++i) {
 		VehicleScoringInfoV01 &vinfo = info.mVehicle[i];
-		if (! vinfo.mIsPlayer)
+
+		/* If a swap happened, we are not the (original session) player, but we are now in control */
+		/* This is just my current theory atm, not sure it's true */
+		bool is_local_player = vinfo.mControl == 0;
+		if (! (vinfo.mIsPlayer || is_local_player))
 			continue;
 
 		if (! loaded_best_in_session) {
@@ -264,6 +275,14 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 		double curr_lap_dist = vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0;
 
 		if (new_lap) {
+
+			if (! loaded_best_in_session) {
+#ifdef ENABLE_LOG
+				fprintf(out_file, "Trying to load best lap for this session");
+#endif
+				LoadBestLap(&best_lap, info, vinfo);
+				loaded_best_in_session = true;
+			}
 
 			/* mLastLapTime is -1 when lap wasn't timed */
 			bool was_timed = vinfo.mLastLapTime > 0.0;
@@ -602,7 +621,7 @@ void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, doub
 
 		// Delta non-negative, colored bar is in the left-hand half
 		else if (delta > 0) {
-			delta_pos.x = SCREEN_CENTER - ((BAR_WIDTH / 2.0) * (delta / 2.0));
+			delta_pos.x -= (BAR_WIDTH / 2.0) * (delta / 2.0);
 			delta_size.right = SCREEN_CENTER - delta_pos.x;
 		}
 
@@ -633,7 +652,7 @@ void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, doub
 
 		char lp_deltaBest[15] = "";
 
-		float time_rect_center = delta >= 0
+		float time_rect_center = delta < 0
 			? (delta_pos.x + delta_size.right)
 			: delta_pos.x;
 		float left_edge = (SCREEN_WIDTH - BAR_WIDTH) / 2.0;
@@ -680,12 +699,7 @@ void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, doub
 
 void DeltaBestPlugin::RenderScreenAfterOverlays(const ScreenInfoV01 &info)
 {
-
-	/* If we're not in realtime, not in green flag, etc...
-	there's no need to display the Delta Best time */
-	if (! NeedToDisplay())
-		return;
-
+	return;
 }
 
 void DeltaBestPlugin::RenderScreenBeforeOverlays(const ScreenInfoV01 &info)
@@ -747,7 +761,7 @@ D3DCOLOR DeltaBestPlugin::TextColor(double delta)
 
 	/* Blend red or green with white when closer to zero */
 	if (abs_val <= cutoff_val) {
-		unsigned int col_val = COLOR_INTENSITY * (1 / cutoff_val) * (cutoff_val - abs_val);
+		unsigned int col_val = int(COLOR_INTENSITY * (1 / cutoff_val) * (cutoff_val - abs_val));
 		if (is_negative)
 			text_color |= (col_val << 16) + col_val;
 		else
@@ -768,7 +782,7 @@ D3DCOLOR DeltaBestPlugin::BarColor(double delta, double delta_diff)
 	double cutoff_val = 0.02;
 
 	if (abs_val <= cutoff_val) {
-		unsigned int col_val = COLOR_INTENSITY * (1 / cutoff_val) * (cutoff_val - abs_val);
+		unsigned int col_val = int(COLOR_INTENSITY * (1 / cutoff_val) * (cutoff_val - abs_val));
 		if (is_gaining)
 			bar_color |= (col_val << 8) + col_val;
 		else
@@ -816,6 +830,7 @@ void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_fi
 
 	// [Keyboard] section
 	config.keyboard_magic = GetPrivateProfileInt("Keyboard", "MagicKey", DEFAULT_MAGIC_KEY, ini_file);
+	config.keyboard_reset = GetPrivateProfileInt("Keyboard", "ResetKey", DEFAULT_RESET_KEY, ini_file);
 
 }
 
@@ -833,15 +848,23 @@ void DeltaBestPlugin::LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &sco
 
 	FILE* fBestLap = fopen(szBestLapFile, "r");
 	if (fBestLap) {
+
 		double final_time = 0.0;
-		unsigned int i = 0, max = 50000;
+		unsigned int i = 0, max = sizeof(lap->elapsed) / sizeof(lap->elapsed[0]);
+
+		/* Reset elapsed array to zeros */
+		for (i = 0; i < max; i++) {
+			lap->elapsed[i] = 0.0;
+		}
+
+		i = 0;
 		while (! feof(fBestLap)) {
 			unsigned int meters;
 			double elapsed;
 			fscanf(fBestLap, "%u=%lf\n", &meters, &elapsed);
 			if (meters && (meters >= 0) && (meters < max)) {
 				lap->elapsed[meters] = elapsed;
-				if (elapsed > 0.0) {
+				if (elapsed > 0.0 && elapsed > final_time) {
 					final_time = elapsed;
 				}
 			}
@@ -849,7 +872,9 @@ void DeltaBestPlugin::LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &sco
 				break;
 			}
 #ifdef ENABLE_LOG
-			fprintf(out_file, "[LOAD] read value from file %d: %f", meters, elapsed);
+			/*
+			fprintf(out_file, "[LOAD]   read value from file %d: %f\n", meters, elapsed);
+			*/
 #endif /* ENABLE_LOG */
 		}
 
@@ -889,7 +914,13 @@ bool DeltaBestPlugin::SaveBestLap(const struct LapTime *lap, const ScoringInfoV0
 	FILE* fBestLap = fopen(szBestLapFile, "w");
 	if (fBestLap) {
 		//fprintf(fBestLap, "[Elapsed]\n");
-		for (unsigned int i = 0; i < (sizeof(lap->elapsed) / sizeof(lap->elapsed[0])); i++) {
+		unsigned int i = 0, max = sizeof(lap->elapsed) / sizeof(lap->elapsed[0]);
+		for (i = 0; i < max; i++) {
+			/* Occasionally, first few meters of the track
+			   could set elapsed to 0.0, or even negative. */
+			if (i > 100 && lap->elapsed[i] == 0.0) {
+				break;
+			}
 			fprintf(fBestLap, "%d=%f\n", i, lap->elapsed[i]);
 		}
 		fclose(fBestLap);
@@ -910,7 +941,9 @@ bool DeltaBestPlugin::SaveBestLap(const struct LapTime *lap, const ScoringInfoV0
 
 const char * DeltaBestPlugin::GetBestLapFileName(const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh)
 {
-	sprintf(bestlap_filename, BEST_LAP_FILE, GetRF2DataPath(), scoring.mTrackName, veh.mVehicleClass);
+	sprintf(bestlap_dir, BEST_LAP_DIR, GetRF2DataPath());
+	CreateDirectory((LPCSTR) bestlap_dir, NULL);
+	sprintf(bestlap_filename, BEST_LAP_FILE, bestlap_dir, scoring.mTrackName, veh.mVehicleClass);
 	return bestlap_filename;
 }
 
