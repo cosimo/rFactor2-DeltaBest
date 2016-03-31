@@ -17,8 +17,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2015.10.06"
-#define DELTA_BEST_VERSION      "v19/Nords"
+#define PLUGIN_NAME             "rF2 Delta Best - 2016.03.31"
+#define DELTA_BEST_VERSION      "v20/Nords"
 
 #undef  ENABLE_LOG              /* To enable file logging */
 
@@ -67,6 +67,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 http://msdn.microsoft.com/en-us/library/windows/desktop/dd375731%28v=vs.85%29.aspx */
 #define DEFAULT_MAGIC_KEY       (0x44)      /* "D" */
 #define DEFAULT_RESET_KEY		(0x5A)      /* "Z" */
+#define DEFAULT_INCRSCALE_KEY		(0x53)      /* "=" */
+#define DEFAULT_DECRSCALE_KEY		(0x41)      /* "-" */
 #define KEY_DOWN(k)             ((GetAsyncKeyState(k) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000))
 
 #define FONT_NAME_MAXLEN 32
@@ -174,6 +176,6 @@ private:
 
 };
 
-inline int round(float x) { return int(floor(x + 0.5)); }
+inline int roundi(float x) { return int(floor(x + 0.5)); }
 
 #endif // _INTERNALS_EXAMPLE_H
