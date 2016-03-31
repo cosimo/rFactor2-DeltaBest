@@ -46,6 +46,10 @@ long render_ticks_int = 12;
 char datapath[FILENAME_MAX] = "";
 char bestlap_dir[FILENAME_MAX] = "";
 char bestlap_filename[FILENAME_MAX] = "";
+float bartimescale = 2.0;
+bool newhotlap = false;
+float newhotlapfinal = 0.0;
+float newhotlapdelta = 0.0;
 
 /* Keeps information about last and best laps */
 struct LapTime {
@@ -75,6 +79,8 @@ struct PluginConfig {
 
 	unsigned int keyboard_magic;
 	unsigned int keyboard_reset;
+	unsigned int keyboard_incrscale;
+	unsigned int keyboard_decrscale;
 } config;
 
 #ifdef ENABLE_LOG
@@ -121,7 +127,8 @@ void DeltaBestPlugin::StartSession()
 	WriteLog("--STARTSESSION--");
 #endif /* ENABLE_LOG */
 	loaded_best_in_session = false;
-	in_realtime = true;
+	//in_realtime = true;
+	displayed_welcome = false;
 	ResetLap(&last_lap);
 	ResetLap(&best_lap);
 }
@@ -233,6 +240,22 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 	else if (KEY_DOWN(config.keyboard_reset)) {
 		ResetLap(&best_lap);
 	}
+	else if (KEY_DOWN(config.keyboard_incrscale)) {
+		if (bartimescale == 0.1) {
+			bartimescale = 0.5;
+		} else {
+			bartimescale = max(bartimescale + 0.5, 0.1);
+		}
+#ifdef ENABLE_LOG
+		fprintf(out_file, "Incr bar timescale: %.3f", bartimescale);
+#endif
+	}
+	else if (KEY_DOWN(config.keyboard_decrscale)) {
+		bartimescale = max(bartimescale - 0.5, 0.1);
+#ifdef ENABLE_LOG
+		fprintf(out_file, "Decr bar timescale: %.3f", bartimescale);
+#endif
+	}
 
 	/* Update plugin context information, used by NeedToDisplay() */
 	green_flag = ((info.mGamePhase == GP_GREEN_FLAG)
@@ -306,10 +329,17 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 					/* Complete the mileage of the last lap.
 					This avoids nasty jumps into empty space (+50.xx) when later comparing with best lap */
-					for (unsigned int i = last_pos + 1 ; i <= (unsigned int) info.mLapDist; i++) {
+					unsigned int max = sizeof(last_lap.elapsed) / sizeof(last_lap.elapsed[0]);
+					max = min(max, (unsigned int)info.mLapDist + 1000);
+
+					for (unsigned int i = last_pos + 1 ; i <= max; i++) {
 						/* FIXME: Inaccurate. Should extrapolate last interval */
-						last_lap.elapsed[i] = last_lap.elapsed[i - 1];
+						last_lap.elapsed[i] = last_lap.final;
 					}
+
+					newhotlap = true;
+					newhotlapfinal = last_lap.final;
+					newhotlapdelta = last_lap.final - best_lap.final;
 
 					best_lap = last_lap;
 
@@ -336,7 +366,7 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 
 		/* If there's a lap in progress, save the delta updates */
 		if (last_lap.started > 0.0) {
-			unsigned int meters = round(vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0);
+			unsigned int meters = roundi(vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0);
 
 			/* It could be that we have stopped our vehicle.
 			In that case (same array position), we want to
@@ -425,7 +455,7 @@ void DeltaBestPlugin::UpdateTelemetry(const TelemInfoV01 &info)
 	inbtw_scoring_traveled += distance;
 	inbtw_scoring_elapsed  += dt;
 
-	unsigned int inbtw_pos = round(last_pos + inbtw_scoring_traveled);
+	unsigned int inbtw_pos = roundi(last_pos + inbtw_scoring_traveled);
 	if (inbtw_pos > last_pos) {
 		last_lap.elapsed[inbtw_pos] = last_lap.elapsed[last_pos] + inbtw_scoring_elapsed;
 #ifdef ENABLE_LOG
@@ -519,7 +549,7 @@ double DeltaBestPlugin::CalculateDeltaBest()
 		return 0;
 
 	/* Current position in meters around the track */
-	int m = round(last_pos + inbtw_scoring_traveled);
+	int m = roundi(last_pos + inbtw_scoring_traveled);
 
 	/* By using meters, and backfilling all the missing information,
 	it shouldn't be possible to not have the exact same position in the best lap */
@@ -537,6 +567,15 @@ double DeltaBestPlugin::CalculateDeltaBest()
 
 bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
+
+	if (newhotlap) {
+		msgInfo.mDestination = 0;
+		msgInfo.mTranslate = 0;
+		sprintf(msgInfo.mText, "Hot Lap: %.3f (%.3f)", newhotlapfinal, newhotlapdelta);
+		newhotlap = false;
+		return true;
+	}
+
 	/* Wait until we're in realtime, otherwise
 	the message is lost in space */
 	if (! in_realtime)
@@ -549,8 +588,11 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 	/* Tell how to toggle display through keyboard */
 	msgInfo.mDestination = 0;
 	msgInfo.mTranslate = 0;
-	sprintf(msgInfo.mText, "DeltaBest " DELTA_BEST_VERSION " plugin enabled (CTRL + D to toggle)");
+	if (!loaded_best_in_session)
+		return false;
 
+	sprintf(msgInfo.mText, "DeltaBest " DELTA_BEST_VERSION " plugin enabled (CTRL + D to toggle)\n  Best lap time: %.3f", best_lap.final);
+	
 	/* Don't do it anymore, just once per session */
 	displayed_welcome = true;
 
@@ -616,12 +658,12 @@ void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, doub
 
 		// Delta is negative: colored bar is in the right-hand half.
 		if (delta < 0) {
-			delta_size.right = (BAR_WIDTH / 2.0) * (-delta / 2.0);
+			delta_size.right = (BAR_WIDTH / 2.0) * (-delta / bartimescale);
 		}
 
 		// Delta non-negative, colored bar is in the left-hand half
 		else if (delta > 0) {
-			delta_pos.x -= (BAR_WIDTH / 2.0) * (delta / 2.0);
+			delta_pos.x -= (BAR_WIDTH / 2.0) * (delta / bartimescale);
 			delta_size.right = SCREEN_CENTER - delta_pos.x;
 		}
 
@@ -831,6 +873,8 @@ void DeltaBestPlugin::LoadConfig(struct PluginConfig &config, const char *ini_fi
 	// [Keyboard] section
 	config.keyboard_magic = GetPrivateProfileInt("Keyboard", "MagicKey", DEFAULT_MAGIC_KEY, ini_file);
 	config.keyboard_reset = GetPrivateProfileInt("Keyboard", "ResetKey", DEFAULT_RESET_KEY, ini_file);
+	config.keyboard_incrscale = GetPrivateProfileInt("Keyboard", "IncrScaleKey", DEFAULT_INCRSCALE_KEY, ini_file);
+	config.keyboard_decrscale = GetPrivateProfileInt("Keyboard", "DecrScaleKey", DEFAULT_DECRSCALE_KEY, ini_file);
 
 }
 
