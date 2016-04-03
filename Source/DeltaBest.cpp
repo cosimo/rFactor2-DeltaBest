@@ -362,6 +362,12 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 			last_pos = prev_pos = 0;
 			prev_lap_dist = 0;
 			/* Leave prev_current_et alone, or you have hyper-jumps */
+
+			/* zero out previous data otherwise interpolation below won't work
+			   Won't be able to tell difference between updatetelemetry and old data */
+			unsigned int i = 0, n = sizeof(last_lap.elapsed) / sizeof(last_lap.elapsed[0]);
+			for (i = 0; i < n; i++)
+				last_lap.elapsed[i] = 0;
 		}
 
 		/* If there's a lap in progress, save the delta updates */
@@ -384,18 +390,41 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 #endif /* ENABLE_LOG */
 				}
 				else {
-					for (unsigned int i = last_pos; i < meters; i++) {
-						/* Elapsed time at this position already filled in by UpdateTelemetry()? */
-						if (last_lap.elapsed[i] > 0.0)
-							continue;
-						/* Linear interpolation of elapsed time in relation to physical position */
-						double interval_fraction = meters == last_pos ? 1.0 : (1.0 * i - last_pos) / (1.0 * meters - last_pos);
-						last_lap.elapsed[i] = prev_current_et + (interval_fraction * time_interval) - vinfo.mLapStartET;
-#ifdef ENABLE_LOG
-						fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f (interval_fraction=%.3f)\n", i, last_lap.elapsed[i], interval_fraction);
-#endif /* ENABLE_LOG */
-					}
+					if (last_lap.elapsed[last_pos] == 0.0)
+						last_lap.elapsed[last_pos] = prev_current_et + (1.0 * time_interval) - vinfo.mLapStartET;
 					last_lap.elapsed[meters] = info.mCurrentET - vinfo.mLapStartET;
+					/* Interpolate between missing values from UpdateTelemetry and UpdateScoring*/
+
+					unsigned int ifrom = last_pos;
+					unsigned int is;
+					unsigned int ito;
+
+					while (ifrom < meters) {
+						/* Find first empty value*/
+						for (is = ifrom; is < meters; is++) {
+							if (last_lap.elapsed[is] == 0.0)
+								break;
+							ifrom = is;
+						}
+						if (is == meters) {
+							break;
+						}
+						/* Find first non empty value from here */
+						for (ito = is; ito < meters; ito++) {
+							if (last_lap.elapsed[is] != 0.0)
+								break;
+						}
+						/* Interpolate between [is : ito) */
+						double interp_time_interval = last_lap.elapsed[ito] - last_lap.elapsed[ifrom];
+						for (; is < ito; is++) {
+							double interp_interval_fraction = (1.0 * is - ifrom) / (1.0 * ito - ifrom);
+							last_lap.elapsed[is] = last_lap.elapsed[ifrom] + (interp_interval_fraction * interp_time_interval);
+#ifdef ENABLE_LOG
+							fprintf(out_file, "[DELTA]     elapsed[%d] = %.3f (interp_interval_fraction=%.3f)\n", is, last_lap.elapsed[is], interp_interval_fraction);
+#endif /* ENABLE_LOG */
+						}
+						ifrom = ito;
+					}
 				}
 
 #ifdef ENABLE_LOG
