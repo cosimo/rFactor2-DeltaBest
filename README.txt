@@ -1,15 +1,15 @@
-rFactor2 Delta Best plugin (v19 "Nords")
-==========================================
+rFactor2 Delta Best plugin (v23 "Anderstorp")
+=============================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2015/10/23
+Last update: 2016/09/25
 URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
 Status:      Works!
 
 == What is this? ==
 
-This is a proof of concept plugin for a Delta Best or Delta Split, or
-whatever you want to call it.
+This is a plugin for rFactor2 to add a Delta to Best Lap or Delta Split,
+or whatever you want to call it to rF2.
 
 The idea is not new at all. At least iRacing has something like this,
 and I haven't seen it done yet for rF2.
@@ -30,6 +30,26 @@ The idea is that you are shown in realtime the difference (split)
 between the current lap and your best lap of the current session.
 
 == Changelog ==
+
+2016/09/25 - v23/Anderstorp
+
+    (v21 and v22 were just test versions with limited distribution)
+
+    Fixed a few logic mistakes in how the best lap is saved. Now the
+    best lap time should be saved more accurately.
+
+    Added a chat message when a best lap is restored from file, so
+    you will know what is your best time in the same car/track
+    combination.
+
+    Changed how the Delta info is shown. Now it's never shown when
+    the player is in the pits, and should be there from the first
+    timed lap whenever you already have a saved lap from before.
+
+2015/10/24 - v20/RoadAmerica
+
+    Fixed the activation logic for the plugin. Since v19 sometimes the
+    plugin would start to show in monitor mode as well.
 
 2015/10/23 - v19/Nords
 
@@ -55,14 +75,7 @@ Copy the content of the zip file (all files, maybe except
 the README.txt) into your rFactor2 plugins folder,
 most likely a directory like this:
 
-  "C:\Program files (x86)\rFactor2\Bin32\Plugins"
-  "C:\Program files (x86)\rFactor2\Bin64\Plugins"
-
-or:
-
-  "C:\Program files (x86)\rFactor2\Plugins"
-
-if your build of rFactor 2 is version < 798.
+  "D:\Steam\SteamApps\common\rFactor 2\Bin64\Plugins"
 
 You can omit this README.txt.
 
@@ -74,14 +87,8 @@ If you don't rename it, it won't be used.
 
 == Note for 32-bit builds ==
 
-If you are still using a 32-bit build of rFactor2, you should
-use the corresponding plugin file (DeltaBest.dll)
-instead of the default one (DeltaBest_x64.dll).
-
-Pick the one that corresponds to your rFactor2 build:
-
-* 32-bit, use "DeltaBest.dll"
-* 64-bit, use "DeltaBest_x64.dll"
+32-bit builds are not supported anymore. 64-bit builds are the only
+practical choice nowadays.
 
 == Status ==
 

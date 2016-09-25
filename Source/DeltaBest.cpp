@@ -28,13 +28,18 @@ extern "C" __declspec(dllexport)
 	void __cdecl DestroyPluginObject(PluginObject *obj)    { delete((DeltaBestPlugin *)obj); }
 
 bool in_realtime = false;              /* Are we in cockpit? As opposed to monitor */
+bool session_started = false;          /* Is a Practice/Race/Q session started or are we in spectator mode, f.ex.? */
+bool lap_was_timed = false;            /* If current/last lap that ended was timed or not */
 bool green_flag = false;               /* Is the race in green flag condition? */
 bool key_switch = true;                /* Enabled/disabled state by keyboard action */
 bool displayed_welcome = false;        /* Whether we displayed the "plugin enabled" welcome message */
 bool loaded_best_in_session = false;   /* Did we already load the best lap in this session? */
+bool shown_best_in_session = false;    /* Did we show a message for the best lap restored from file? */
+bool player_in_pits = false;           /* Is the player currently in the pits? */
 unsigned int prev_pos = 0;             /* Meters around the track of the current lap (previous interval) */
 unsigned int last_pos = 0;             /* Meters around the track of the current lap */
 unsigned int scoring_ticks = 0;        /* Advances every time UpdateScoring() is called */
+unsigned int laps_since_realtime = 0;  /* Number of laps completed since entering realtime last time */
 double current_delta_best = NULL;      /* Current calculated delta best time */
 double prev_delta_best = NULL;
 double prev_lap_dist = 0;              /* Used to accurately calculate dt and */
@@ -120,8 +125,11 @@ void DeltaBestPlugin::StartSession()
 #ifdef ENABLE_LOG
 	WriteLog("--STARTSESSION--");
 #endif /* ENABLE_LOG */
+	session_started = true;
 	loaded_best_in_session = false;
-	in_realtime = true;
+	shown_best_in_session = false;
+	lap_was_timed = false;
+	player_in_pits = false;
 	ResetLap(&last_lap);
 	ResetLap(&best_lap);
 }
@@ -129,7 +137,7 @@ void DeltaBestPlugin::StartSession()
 void DeltaBestPlugin::EndSession()
 {
 	mET = 0.0f;
-	in_realtime = false;
+	session_started = false;
 #ifdef ENABLE_LOG
 	WriteLog("--ENDSESSION--");
 	if (out_file) {
@@ -158,6 +166,8 @@ void DeltaBestPlugin::EnterRealtime()
 	// start up timer every time we enter realtime
 	mET = 0.0f;
 	in_realtime = true;
+	laps_since_realtime = 0;
+
 #ifdef ENABLE_LOG
 	WriteLog("---ENTERREALTIME---");
 #endif /* ENABLE_LOG */
@@ -196,7 +206,7 @@ void DeltaBestPlugin::ResetLap(struct LapTime *lap)
 
 bool DeltaBestPlugin::NeedToDisplay()
 {
-	// If we're in the monitor or replay,
+	// If we're in the monitor or replay, or no session has started yet,
 	// no delta best should be displayed
 	if (! in_realtime)
 		return false;
@@ -208,6 +218,13 @@ bool DeltaBestPlugin::NeedToDisplay()
 	// If we are in any race/practice phase that's not
 	// green flag, we don't need or want Delta Best displayed
 	if (! green_flag)
+		return false;
+
+	if (player_in_pits)
+		return false;
+
+	/* Don't display anything if current lap isn't timed */
+	if (! lap_was_timed)
 		return false;
 
 	/* We can't display a delta best until we have a best lap recorded */
@@ -242,23 +259,16 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 	for (long i = 0; i < info.mNumVehicles; ++i) {
 		VehicleScoringInfoV01 &vinfo = info.mVehicle[i];
 
-		/* If a swap happened, we are not the (original session) player, but we are now in control */
-		/* This is just my current theory atm, not sure it's true */
-		bool is_local_player = vinfo.mControl == 0;
-		if (! (vinfo.mIsPlayer || is_local_player))
+		// Player's car? If not, skip
+		if (! vinfo.mIsPlayer || vinfo.mControl != 0)
 			continue;
 
-		if (! loaded_best_in_session) {
-#ifdef ENABLE_LOG
-			fprintf(out_file, "Trying to load best lap for this session");
-#endif
-			LoadBestLap(&best_lap, info, vinfo);
-			loaded_best_in_session = true;
-		}
+		player_in_pits = vinfo.mInPits;
 
 #ifdef ENABLE_LOG
-		fprintf(out_file, "mLapStartET=%.3f mCurrentET=%.3f Elapsed=%.3f mLapDist=%.3f/%.3f prevLapDist=%.3f prevCurrentET=%.3f deltaBest=%+2.2f lastPos=%d prevPos=%d\n",
+		fprintf(out_file, "mLapStartET=%.3f mLastLapTime=%.3f mCurrentET=%.3f Elapsed=%.3f mLapDist=%.3f/%.3f prevLapDist=%.3f prevCurrentET=%.3f deltaBest=%+2.2f lastPos=%d prevPos=%d\n",
 			vinfo.mLapStartET,
+			vinfo.mLastLapTime,
 			info.mCurrentET,
 			(info.mCurrentET - vinfo.mLapStartET),
 			vinfo.mLapDist,
@@ -270,56 +280,61 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info)
 			prev_pos);
 #endif /* ENABLE_LOG */
 
+		if (! loaded_best_in_session) {
+#ifdef ENABLE_LOG
+			fprintf(out_file, "Trying to load best lap for this session\n");
+#endif
+			LoadBestLap(&best_lap, info, vinfo);
+			loaded_best_in_session = true;
+		}
+
 		/* Check if we started a new lap just now */
 		bool new_lap = (vinfo.mLapStartET != last_lap.started);
 		double curr_lap_dist = vinfo.mLapDist >= 0 ? vinfo.mLapDist : 0;
 
 		if (new_lap) {
 
-			if (! loaded_best_in_session) {
-#ifdef ENABLE_LOG
-				fprintf(out_file, "Trying to load best lap for this session");
-#endif
-				LoadBestLap(&best_lap, info, vinfo);
-				loaded_best_in_session = true;
-			}
-
 			/* mLastLapTime is -1 when lap wasn't timed */
-			bool was_timed = vinfo.mLastLapTime > 0.0;
+			lap_was_timed = ! (vinfo.mLapStartET == 0.0 && vinfo.mLastLapTime == 0.0);
 
-			if (was_timed) {
+			if (lap_was_timed) {
 				last_lap.final = vinfo.mLastLapTime;
 				last_lap.ended = info.mCurrentET;
 
 #ifdef ENABLE_LOG
-				fprintf(out_file, "New LAP: Last = %.3f, started = %.3f, ended = %.3f, interval_offset = %.3f\n",
+				fprintf(out_file, "New LAP: Last = %.3f, started = %.3f, ended = %.3f interval_offset = %.3f\n",
 					last_lap.final, last_lap.started, last_lap.ended, last_lap.interval_offset);
 #endif /* ENABLE_LOG */
 
 				/* Was it the best lap so far? */
-				bool best_so_far = (best_lap.final == NULL || (last_lap.final < best_lap.final));
+				/* .final == -1.0 is the first lap of the session, can't be timed */
+				bool valid_timed_lap = last_lap.final > 0.0;
+				bool best_so_far = valid_timed_lap && (
+						(best_lap.final == NULL)
+					 || (best_lap.final != NULL && last_lap.final < best_lap.final));
+
 				if (best_so_far) {
 #ifdef ENABLE_LOG
 					fprintf(out_file, "Last lap was the best so far (final time = %.3f, previous best = %.3f)\n",
 						last_lap.final, best_lap.final);
 #endif /* ENABLE_LOG */
 
-					/* Complete the mileage of the last lap.
-					This avoids nasty jumps into empty space (+50.xx) when later comparing with best lap */
+					/**
+					 * Complete the mileage of the last lap.
+                     * This avoids nasty jumps into empty space (+50.xx) when later comparing with best lap.
+					 */
 					for (unsigned int i = last_pos + 1 ; i <= (unsigned int) info.mLapDist; i++) {
 						/* FIXME: Inaccurate. Should extrapolate last interval */
 						last_lap.elapsed[i] = last_lap.elapsed[i - 1];
 					}
 
 					best_lap = last_lap;
-
 					SaveBestLap(&best_lap, info, vinfo);
-
 				}
 
 #ifdef ENABLE_LOG
-				fprintf(out_file, "Best LAP yet  = %.3f, started = %.3f, ended = %.3f, interval_offset = %3.f\n",
-					best_lap.final, best_lap.started, best_lap.ended, best_lap.interval_offset);
+				fprintf(out_file, "Best LAP yet  = %.3f, started = %.3f, ended = %.3f\n",
+					best_lap.final, best_lap.started, best_lap.ended);
 #endif /* ENABLE_LOG */
 			}
 
@@ -543,18 +558,29 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 		return false;
 
 	/* We just want to display this message once in this rF2 session */
-	if (displayed_welcome)
-		return false;
+	if (! displayed_welcome) {
 
-	/* Tell how to toggle display through keyboard */
-	msgInfo.mDestination = 0;
-	msgInfo.mTranslate = 0;
-	sprintf(msgInfo.mText, "DeltaBest " DELTA_BEST_VERSION " plugin enabled (CTRL + D to toggle)");
+		/* Tell how to toggle display through keyboard */
+		msgInfo.mDestination = 0;
+		msgInfo.mTranslate = 0;
+		sprintf(msgInfo.mText, "DeltaBest " DELTA_BEST_VERSION " plugin enabled (CTRL + D to toggle)");
 
-	/* Don't do it anymore, just once per session */
-	displayed_welcome = true;
+		/* Don't do it anymore, just once per session */
+		displayed_welcome = true;
+		return true;
+	}
 
-	return true;
+	if (loaded_best_in_session && best_lap.final > 0.0 && ! shown_best_in_session) {
+		msgInfo.mDestination = 0;
+		msgInfo.mTranslate = 0;
+		unsigned int best_lap_minutes = best_lap.final / 60;
+		double best_lap_seconds = best_lap.final - (best_lap_minutes * 60.0);
+		sprintf(msgInfo.mText, "Best lap for this car/track: %d:%.3f", best_lap_minutes, best_lap_seconds);
+		shown_best_in_session = true;
+		return true;
+	}
+
+	return false;
 }
 
 void DeltaBestPlugin::DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff)
@@ -859,10 +885,10 @@ void DeltaBestPlugin::LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &sco
 
 		i = 0;
 		while (! feof(fBestLap)) {
-			unsigned int meters;
-			double elapsed;
+			unsigned int meters = -1;
+			double elapsed = 0.0;
 			fscanf(fBestLap, "%u=%lf\n", &meters, &elapsed);
-			if (meters && (meters >= 0) && (meters < max)) {
+			if (meters >= 0 && meters < max) {
 				lap->elapsed[meters] = elapsed;
 				if (elapsed > 0.0 && elapsed > final_time) {
 					final_time = elapsed;
@@ -878,13 +904,19 @@ void DeltaBestPlugin::LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &sco
 #endif /* ENABLE_LOG */
 		}
 
-		/* Pretend best lap was achieved at the start of this session */
-		lap->started = scoring.mCurrentET;
-		lap->ended = scoring.mCurrentET;
-		lap->interval_offset = scoring.mCurrentET;
-		lap->final = final_time;
-
 		fclose(fBestLap);
+
+		/* Pretend best lap was achieved at the start of this session */
+		if (final_time > 0.0) {
+			lap->started = scoring.mCurrentET;
+			lap->ended = scoring.mCurrentET;
+			lap->interval_offset = scoring.mCurrentET;
+			lap->final = final_time;
+		}
+		/* Invalid lap? */
+		else {
+			lap->final = NULL;
+		}
 
 #ifdef ENABLE_LOG
 		fprintf(out_file, "[LOAD] Load from file completed\n");
@@ -902,7 +934,7 @@ bool DeltaBestPlugin::SaveBestLap(const struct LapTime *lap, const ScoringInfoV0
 {
 
 #ifdef ENABLE_LOG
-	fprintf(out_file, "[SAVE] Saving best lap\n");
+	fprintf(out_file, "[SAVE] Saving best lap of %.2f\n", lap->final);
 #endif /* ENABLE_LOG */
 
 	/* Get file name for the best lap */
@@ -921,7 +953,10 @@ bool DeltaBestPlugin::SaveBestLap(const struct LapTime *lap, const ScoringInfoV0
 			if (i > 100 && lap->elapsed[i] == 0.0) {
 				break;
 			}
-			fprintf(fBestLap, "%d=%f\n", i, lap->elapsed[i]);
+			/* Don't store values greater than official final time.
+			   On restore we'd get a different lap time. */
+			double time_value = min(lap->elapsed[i], lap->final);
+			fprintf(fBestLap, "%d=%f\n", i, time_value);
 		}
 		fclose(fBestLap);
 #ifdef ENABLE_LOG
