@@ -17,8 +17,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3dx9.h>              /* DirectX9 main header */
 #include <cmath>
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2016.09.25"
-#define DELTA_BEST_VERSION      "v23/AMP"
+#define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
+#define DELTA_BEST_VERSION      "v24/Nola"
 
 #undef ENABLE_LOG               /* To enable file logging */
 
@@ -175,5 +175,4 @@ private:
 };
 
 inline int round(float x) { return int(floor(x + 0.5)); }
-
 #endif // _INTERNALS_EXAMPLE_H

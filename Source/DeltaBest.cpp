@@ -573,9 +573,14 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 	if (loaded_best_in_session && best_lap.final > 0.0 && ! shown_best_in_session) {
 		msgInfo.mDestination = 0;
 		msgInfo.mTranslate = 0;
+
+		/* Split final lap time in <minutes>:<seconds>.<msec> */
 		unsigned int best_lap_minutes = best_lap.final / 60;
-		double best_lap_seconds = best_lap.final - (best_lap_minutes * 60.0);
-		sprintf(msgInfo.mText, "Best lap for this car/track: %d:%.3f", best_lap_minutes, best_lap_seconds);
+		unsigned int best_lap_seconds = best_lap.final - (60 * best_lap_minutes);
+		unsigned int best_lap_msec = 1000 * (best_lap.final -
+			(60 * best_lap_minutes) - best_lap_seconds);
+		sprintf(msgInfo.mText, "Best lap for this car/track: %d:%02d.%03d",
+			best_lap_minutes, best_lap_seconds, best_lap_msec);
 		shown_best_in_session = true;
 		return true;
 	}
