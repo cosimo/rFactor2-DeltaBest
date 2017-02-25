@@ -1,9 +1,9 @@
-rFactor2 Delta Best plugin (v23 "Anderstorp")
+rFactor2 Delta Best plugin (v24 "Nola")
 =============================================
 
 Author:      Cosimo <cosimo@streppone.it>
-Last update: 2016/09/25
-URL:         http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
+Last update: 2017/02/25
+URL:         https://forum.studio-397.com/index.php?threads/delta-best-plugin-for-rfactor-2.43399/
 Status:      Works!
 
 == What is this? ==
@@ -30,6 +30,12 @@ The idea is that you are shown in realtime the difference (split)
 between the current lap and your best lap of the current session.
 
 == Changelog ==
+
+2017/02/25 - v24/Nola
+
+    Fixed a cosmetic bug in how the best lap time is displayed
+    when a session is loaded or when a new best lap is saved.
+    A laptime of "2:02.058" would be displayed as "2:2.058".
 
 2016/09/25 - v23/Anderstorp
 
@@ -129,7 +135,7 @@ Examples of things you can do:
 Feedback on bugs, feature requests, generous donations :)
 etc... are appreciated:
 
-  http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
+  https://forum.studio-397.com/index.php?threads/delta-best-plugin-for-rfactor-2.43399/
 
 Have fun,
 
